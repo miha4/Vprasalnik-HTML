@@ -1,0 +1,1453 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin ankete</title>
+    <style>
+        :root {
+            --bg: #f6f8fb;
+            --panel: #ffffff;
+            --line: #d9e1ec;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --blue: #2563eb;
+            --blue-soft: #eaf1ff;
+            --green: #15803d;
+            --red: #b91c1c;
+            --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            --radius: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+        }
+
+        .wrap {
+            max-width: 90%;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 18px;
+        }
+
+
+        .preserve-wrap {
+            white-space: pre-wrap;
+        }
+
+        .survey-logo {
+            margin-bottom: 14px;
+            max-width: 220px;
+        }
+
+        .topbar-logo-wrap {
+            width: 180px;
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+        }
+
+        .topbar-logo-wrap img {
+            max-width: 100%;
+            max-height: 80px;
+            height: auto;
+            display: block;
+            object-fit: contain;
+        }
+
+        .survey-logo img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        h1, h2, h3 {
+            margin: 0 0 12px;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.3fr 0.7fr;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 18px;
+        }
+
+        .section {
+            padding-bottom: 18px;
+            margin-bottom: 18px;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+            .section:last-child {
+                margin-bottom: 0;
+                padding-bottom: 0;
+                border-bottom: 0;
+            }
+
+        label {
+            display: block;
+            font-weight: 700;
+            margin: 10px 0 6px;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px 12px;
+            font: inherit;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        textarea {
+            min-height: 86px;
+            resize: vertical;
+        }
+
+        .checkbox-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 12px;
+        }
+
+            .checkbox-row input {
+                margin: 0;
+            }
+
+        .btns {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        button {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+            button:hover {
+                background: #f8fafc;
+            }
+
+        .btn-primary {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: white;
+        }
+
+            .btn-primary:hover {
+                filter: brightness(0.97);
+            }
+
+        .btn-ok {
+            background: var(--green);
+            border-color: var(--green);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--red);
+            border-color: var(--red);
+            color: white;
+        }
+
+        .status {
+            margin-top: 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #eef4ff;
+            border: 1px solid #cfe0ff;
+            white-space: pre-wrap;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .question-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .question-item {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 12px;
+            background: #fcfdff;
+        }
+
+        .question-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--blue-soft);
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .mini-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+            .mini-actions button {
+                padding: 6px 10px;
+                font-size: 13px;
+            }
+
+        .survey-card {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 16px;
+            background: white;
+            margin-bottom: 16px;
+        }
+
+        .survey-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .survey-top-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+            .survey-top-grid .full {
+                grid-column: 1 / -1;
+            }
+
+        .yesno {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+            margin-bottom: 12px;
+        }
+
+        .units-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .units-box label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: 400;
+        }
+
+        .child-box {
+            margin-top: 12px;
+            padding: 14px;
+            border: 1px solid #dbe3f0;
+            border-radius: 12px;
+            background: #fafcff;
+        }
+
+        .question-image {
+            margin: 10px 0 6px;
+            max-width: 100%;
+        }
+
+        .question-image img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border: 1px solid #d9e1ec;
+            border-radius: 10px;
+        }
+
+        .answer-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 10px 12px;
+            font: inherit;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            resize: vertical;
+            background: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #cfd8e3;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f3f6fb;
+        }
+
+        .hint {
+            color: var(--muted);
+            font-size: 13px;
+            margin-top: 6px;
+        }
+
+        .top-chip {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3730a3;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        @media (max-width: 980px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .survey-top-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <div class="topbar">
+            <div>
+                <h1>Admin ankete</h1>
+                <div class="muted">Pripravi vprašanja in izvozi eno samostojno datoteko <strong>anketa.html</strong> za uporabnika.</div>
+            </div>
+            <div id="topbarLogoWrap" class="topbar-logo-wrap hidden">
+                <img id="topbarLogo" alt="Logotip ankete" />
+            </div>
+        </div>
+
+        <div class="layout">
+            <div class="panel">
+                <div class="section">
+                    <h2>Nastavitve ankete</h2>
+
+                    <label for="surveyTitle">Naslov ankete</label>
+                    <input id="surveyTitle" type="text" value="Interna anketa" />
+
+                    <label for="surveySubtitle">Navodilo</label>
+                    <textarea id="surveySubtitle">Izpolnite anketo. Na koncu kliknite »Natisni / Shrani v PDF« in PDF pošljite po emailu.</textarea>
+
+                    <label for="unitOptions">Enote (ločene s podpičjem)</label>
+                    <input id="unitOptions" type="text" value="OKZP;FIS;FDT;BRN;MBX;POW;CEK" />
+                    <div class="hint">Primer: OKZP; FIS; FDT</div>
+
+                    <label for="surveyLogo">Logotip ankete (neobvezno)</label>
+                    <input id="surveyLogo" type="file" accept="image/*" />
+                    <div class="hint">Logotip se bo vgradil v končno anketa.html.</div>
+                </div>
+
+                <div class="section">
+                    <h2>Vprašanje</h2>
+
+                    <label for="qText">Besedilo vprašanja</label>
+                    <textarea id="qText" placeholder="Ali želite spremembo delovnega ciklusa določenih kontrolorjev?"></textarea>
+
+                    <label for="qType">Tip vprašanja</label>
+                    <select id="qType">
+                        <option value="yesno">DA / NE</option>
+                        <option value="text_long">Tekstovni odgovor</option>
+                    </select>
+                    <label>Za katere enote velja vprašanje? (neobvezno)</label>
+                    <div id="questionUnitsBox" class="units-box"></div>
+                    <div class="hint">Če ne izbereš nobene enote, bo vprašanje prikazano vsem.</div>
+
+                    <label for="questionImage">Slika vprašanja (neobvezno)</label>
+                    <input id="questionImage" type="file" accept="image/*" />
+
+                    <div class="hint">Slika se bo vgradila v končno anketa.html, zato uporabnik dobi samo eno datoteko.</div>
+
+                    <div class="checkbox-row">
+                        <input id="hasChild" type="checkbox" />
+                        <label for="hasChild" style="margin:0; font-weight:700;">Ob odgovoru DA pokaži podvprašanje s tabelo</label>
+                    </div>
+
+                    <div id="childFields" class="hidden">
+                        <label for="childText">Besedilo podvprašanja</label>
+                        <textarea id="childText" placeholder="Zapišite podrobnosti."></textarea>
+
+                        <label for="childColumns">Stolpci tabele (ločeni s podpičjem)</label>
+                        <input id="childColumns" type="text" placeholder="KONTROLOR; STARI TIM; NOVI TIM" />
+
+                        <label for="childImage">Slika podvprašanja (neobvezno)</label>
+                        <input id="childImage" type="file" accept="image/*" />
+                    </div>
+
+                    <div class="btns">
+                        <button id="saveQuestionBtn" type="button" class="btn-primary">Dodaj vprašanje</button>
+                        <button id="resetQuestionBtn" type="button">Počisti obrazec</button>
+                    </div>
+
+                    <div id="status" class="status">Pripravljen.</div>
+                </div>
+
+                <div class="section">
+                    <h2>Vprašanja</h2>
+                    <div id="questionList" class="question-list"></div>
+                </div>
+
+                <div class="section">
+                    <h2>Uvoz / izvoz konfiguracije</h2>
+
+                    <div class="btns">
+                        <button id="exportConfigBtn" type="button">Izvozi JSON</button>
+                        <button id="importConfigBtn" type="button">Uvozi JSON</button>
+                        <input id="importConfigInput" type="file" accept=".json,application/json" class="hidden" />
+                    </div>
+
+                    <div class="btns">
+                        <button id="exportSurveyBtn" type="button" class="btn-ok">Izvozi anketa.html</button>
+                    </div>
+
+                    <div class="hint">Uporabniku pošlješ samo datoteko <strong>anketa.html</strong>.</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Predogled ankete</h2>
+                <div id="previewContainer"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const state = {
+            surveyTitle: "Interna anketa",
+            surveySubtitle: "Izpolnite anketo. Na koncu kliknite »Natisni / Shrani v PDF« in PDF pošljite po emailu.",
+            logo: "",
+            units: ["OKZP", "FIS", "FDT", "BRN", "MBX", "POW", "CEK"],
+            questions: []
+        };
+
+        let editIndex = -1;
+
+        const surveyTitleEl = document.getElementById("surveyTitle");
+        const surveySubtitleEl = document.getElementById("surveySubtitle");
+        const unitOptionsEl = document.getElementById("unitOptions");
+        const qTextEl = document.getElementById("qText");
+        const qTypeEl = document.getElementById("qType");
+        const hasChildEl = document.getElementById("hasChild");
+        const childFieldsEl = document.getElementById("childFields");
+        const childTextEl = document.getElementById("childText");
+        const childColumnsEl = document.getElementById("childColumns");
+        const questionListEl = document.getElementById("questionList");
+        const previewContainerEl = document.getElementById("previewContainer");
+        const statusEl = document.getElementById("status");
+
+        function setStatus(message) {
+            statusEl.textContent = message;
+        }
+
+        function escapeHtml(str) {
+            return String(str ?? "")
+                .replaceAll("&", "&amp;")
+                .replaceAll("<", "&lt;")
+                .replaceAll(">", "&gt;")
+                .replaceAll('"', "&quot;");
+        }
+
+        function normalizeColumns(value) {
+            return String(value || "")
+                .split(";")
+                .map(x => x.trim())
+                .filter(Boolean);
+        }
+
+        function questionAppliesToUnit(question, selectedUnit) {
+            if (!question.units || question.units.length === 0) return true;
+            if (!selectedUnit) return true;
+            return question.units.includes(selectedUnit);
+        }
+
+        function renderTopbarLogo() {
+            const wrap = document.getElementById("topbarLogoWrap");
+            const img = document.getElementById("topbarLogo");
+
+            if (state.logo) {
+                img.src = state.logo;
+                wrap.classList.remove("hidden");
+            } else {
+                img.removeAttribute("src");
+                wrap.classList.add("hidden");
+            }
+        }
+
+        async function updateLogoFromInput() {
+            const logoFile = document.getElementById("surveyLogo").files[0];
+            if (logoFile) {
+                state.logo = await fileToDataUrl(logoFile);
+                renderTopbarLogo();
+                renderPreview();
+                setStatus("Logotip posodobljen.");
+            }
+        }
+
+        document.getElementById("surveyLogo").addEventListener("change", updateLogoFromInput);
+
+        function syncSettingsFromInputs() {
+            state.surveyTitle = surveyTitleEl.value.trim() || "Interna anketa";
+            state.surveySubtitle = surveySubtitleEl.value.trim() || "";
+            state.units = unitOptionsEl.value
+                .split(";")
+                .map(x => x.trim())
+                .filter(Boolean);
+        }
+
+        function resetQuestionForm() {
+            editIndex = -1;
+            qTextEl.value = "";
+            qTypeEl.value = "yesno";
+            hasChildEl.checked = false;
+            childTextEl.value = "";
+            childColumnsEl.value = "";
+            childFieldsEl.classList.add("hidden");
+            document.getElementById("saveQuestionBtn").textContent = "Dodaj vprašanje";
+            document.getElementById("questionImage").value = "";
+            document.getElementById("childImage").value = "";
+            updateQuestionTypeUI();
+            renderUnitCheckboxes([]);
+        }
+
+        function updateQuestionTypeUI() {
+            const isYesNo = qTypeEl.value === "yesno";
+            if (!isYesNo) {
+                hasChildEl.checked = false;
+                childFieldsEl.classList.add("hidden");
+            } else {
+                childFieldsEl.classList.toggle("hidden", !hasChildEl.checked);
+            }
+        }
+
+        async function getQuestionFromForm() {
+            const text = qTextEl.value.trim();
+
+            if (!text) {
+                throw new Error("Besedilo vprašanja je obvezno.");
+            }
+
+            const questionImageFile = document.getElementById("questionImage").files[0];
+            const questionImageData = await fileToDataUrl(questionImageFile);
+
+            const question = {
+                id: "q_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                type: qTypeEl.value,
+                text: text,
+                image: questionImageData || "",
+                units: getSelectedQuestionUnits(),
+                child: null
+            };
+
+            if (qTypeEl.value === "yesno" && hasChildEl.checked) {
+                const childText = childTextEl.value.trim();
+                const childColumns = normalizeColumns(childColumnsEl.value);
+                const childImageFile = document.getElementById("childImage").files[0];
+                const childImageData = await fileToDataUrl(childImageFile);
+
+                if (!childText) {
+                    throw new Error("Besedilo podvprašanja je obvezno.");
+                }
+
+                if (childColumns.length === 0) {
+                    throw new Error("Vnesi vsaj en stolpec tabele.");
+                }
+
+                question.child = {
+                    text: childText,
+                    columns: childColumns,
+                    image: childImageData || ""
+                };
+            }
+
+            return question;
+        }
+
+        function renderUnitCheckboxes(selectedUnits = []) {
+            const box = document.getElementById("questionUnitsBox");
+            syncSettingsFromInputs();
+
+            box.innerHTML = "";
+
+            state.units.forEach(unit => {
+                const label = document.createElement("label");
+                const cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.value = unit;
+                cb.checked = selectedUnits.includes(unit);
+
+                label.appendChild(cb);
+                label.append(unit);
+
+                box.appendChild(label);
+            });
+        }
+
+        function getSelectedQuestionUnits() {
+            const inputs = document.querySelectorAll("#questionUnitsBox input[type='checkbox']");
+            return Array.from(inputs)
+                .filter(i => i.checked)
+                .map(i => i.value);
+        }
+
+        async function saveQuestion() {
+            try {
+                const question = await getQuestionFromForm();
+
+                if (editIndex >= 0) {
+                    const oldQuestion = state.questions[editIndex];
+                    question.id = oldQuestion.id;
+
+                    if (!question.image) {
+                        question.image = oldQuestion.image || "";
+                    }
+
+                    if (question.child && !question.child.image) {
+                        question.child.image = oldQuestion.child?.image || "";
+                    }
+
+                    state.questions[editIndex] = question;
+                    setStatus("Vprašanje posodobljeno.");
+                } else {
+                    state.questions.push(question);
+                    setStatus("Vprašanje dodano.");
+                }
+
+                resetQuestionForm();
+                renderAll();
+            } catch (err) {
+                setStatus(err.message);
+                console.error(err);
+            }
+        }
+
+        function editQuestion(index) {
+            const q = state.questions[index];
+            editIndex = index;
+
+            qTextEl.value = q.text;
+            qTypeEl.value = q.type;
+            hasChildEl.checked = !!q.child;
+            childTextEl.value = q.child ? q.child.text : "";
+            childColumnsEl.value = q.child ? q.child.columns.join("; ") : "";
+            document.getElementById("questionImage").value = "";
+            document.getElementById("childImage").value = "";
+
+            renderUnitCheckboxes(q.units || []);
+
+            updateQuestionTypeUI();
+
+            document.getElementById("saveQuestionBtn").textContent = "Shrani spremembe";
+            setStatus(`Urejanje vprašanja ${index + 1}. Če želiš zamenjati sliko, jo ponovno naloži.`);
+        }
+
+        function deleteQuestion(index) {
+            if (!confirm("Ali želiš izbrisati vprašanje?")) return;
+            state.questions.splice(index, 1);
+
+            if (editIndex === index) {
+                resetQuestionForm();
+            }
+
+            renderAll();
+            setStatus("Vprašanje izbrisano.");
+        }
+
+        function moveQuestion(index, direction) {
+            const target = index + direction;
+            if (target < 0 || target >= state.questions.length) return;
+
+            const tmp = state.questions[index];
+            state.questions[index] = state.questions[target];
+            state.questions[target] = tmp;
+            renderAll();
+        }
+
+        function renderQuestionList() {
+            if (state.questions.length === 0) {
+                questionListEl.innerHTML = `<div class="hint">Še ni dodanih vprašanj.</div>`;
+                return;
+            }
+
+            questionListEl.innerHTML = state.questions.map((q, index) => `
+        <div class="question-item">
+            <div class="question-head">
+                <div>
+                    <div class="badge">Vprašanje ${index + 1}</div>
+                    <div><strong>${escapeHtml(q.text)}</strong></div>
+
+                    <div class="hint">
+                        Tip: ${escapeHtml(q.type === "yesno" ? "DA / NE" : "Tekstovni odgovor")}
+                        ${q.image ? " | ima sliko" : ""}
+                        ${q.child ? " | ima podvprašanje" : ""}
+                    </div>
+
+                    <div class="hint">
+                        Enote: ${!q.units || q.units.length === 0
+                    ? "vse enote"
+                    : escapeHtml(q.units.join("; "))
+                }
+                    </div>
+
+                    ${q.child ? `
+                        <div class="hint" style="margin-top:6px;">
+                            Podvprašanje: ${escapeHtml(q.child.text)}<br>
+                            Stolpci: ${escapeHtml(q.child.columns.join("; "))}
+                        </div>
+                    ` : ""}
+
+                    ${q.child?.image ? "<div class='hint'>Podvprašanje ima tudi sliko.</div>" : ""}
+                </div>
+
+                <div class="mini-actions">
+                    <button type="button" onclick="moveQuestion(${index}, -1)">↑</button>
+                    <button type="button" onclick="moveQuestion(${index}, 1)">↓</button>
+                    <button type="button" onclick="editQuestion(${index})">Uredi</button>
+                    <button type="button" onclick="deleteQuestion(${index})">Izbriši</button>
+                </div>
+            </div>
+        </div>
+    `).join("");
+        }
+
+        function renderPreview() {
+            syncSettingsFromInputs();
+
+            const unitOptions = state.units
+                .map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(unit)}</option>`)
+                .join("");
+
+            let html = `
+        <div class="survey-card">
+            ${state.logo ? `
+                <div class="survey-logo">
+                    <img src="${state.logo}" alt="Logotip" />
+                </div>
+            ` : ""}
+
+            <div class="survey-title">${escapeHtml(state.surveyTitle)}</div>
+            <div class="preserve-wrap" style="margin-bottom:12px; color: var(--muted);">${escapeHtml(state.surveySubtitle)}</div>
+
+            <div class="survey-top-grid">
+                <div class="full">
+                    <label>Ime in priimek</label>
+                    <input type="text" placeholder="Vpiši ime in priimek" />
+                </div>
+                <div>
+                    <label>Datum</label>
+                    <input type="text" placeholder="Npr. 18. 3. 2026" />
+                </div>
+                <div>
+                    <label>Enota</label>
+                    <select>
+                        <option value="">-- izberi enoto --</option>
+                        ${unitOptions}
+                    </select>
+                </div>
+            </div>
+        </div>
+    `;
+
+            if (state.questions.length === 0) {
+                html += `<div class="hint">Dodaj vprašanja za predogled ankete.</div>`;
+                previewContainerEl.innerHTML = html;
+                return;
+            }
+
+            state.questions.forEach((q, index) => {
+                html += `
+            <div class="survey-card">
+                <div class="survey-title">${index + 1}. ${escapeHtml(q.text)}</div>
+                    <div class="hint">
+                        ${!q.units || q.units.length === 0
+                                            ? "Velja za vse enote"
+                                            : "Velja za: " + escapeHtml(q.units.join("; "))
+                        }
+                    </div>
+
+                ${q.image ? `
+                    <div class="question-image">
+                        <img src="${q.image}" alt="Slika vprašanja" />
+                    </div>
+                ` : ""}
+
+                ${q.type === "yesno" ? `
+                    <div class="yesno">
+                        <label><input type="radio" name="preview_q_${index}" /> DA</label>
+                        <label><input type="radio" name="preview_q_${index}" /> NE</label>
+                    </div>
+                ` : `
+                    <textarea class="answer-textarea" placeholder="Vpiši odgovor..."></textarea>
+                `}
+
+                ${q.child ? `
+                    <div class="child-box">
+                        <div class="preserve-wrap"><strong>${escapeHtml(q.child.text)}</strong></div>
+
+                        ${q.child.image ? `
+                            <div class="question-image">
+                                <img src="${q.child.image}" alt="Slika podvprašanja" />
+                            </div>
+                        ` : ""}
+
+                        <table>
+                            <thead>
+                                <tr>${q.child.columns.map(col => `<th>${escapeHtml(col)}</th>`).join("")}</tr>
+                            </thead>
+                            <tbody>
+                                <tr>${q.child.columns.map(() => `<td><input type="text" /></td>`).join("")}</tr>
+                            </tbody>
+                        </table>
+                        <button type="button" style="margin-top:10px;">+ Dodaj vrstico</button>
+                    </div>
+                ` : ""}
+            </div>
+        `;
+            });
+
+            previewContainerEl.innerHTML = html;
+        }
+
+        function renderAll() {
+            renderTopbarLogo();
+            renderQuestionList();
+            renderPreview();
+        }
+
+        function downloadBlob(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        function exportConfig() {
+            syncSettingsFromInputs();
+            const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json;charset=utf-8" });
+            downloadBlob(blob, "anketa-config.json");
+            setStatus("JSON konfiguracija izvožena.");
+        }
+
+        function importConfig(file) {
+            const reader = new FileReader();
+
+            reader.onload = function (e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+
+                    state.surveyTitle = data.surveyTitle || "Interna anketa";
+                    state.surveySubtitle = data.surveySubtitle || "";
+                    state.units = Array.isArray(data.units) ? data.units : [];
+                    state.logo = data.logo || "";
+                    state.questions = Array.isArray(data.questions) ? data.questions : [];
+
+                    surveyTitleEl.value = state.surveyTitle;
+                    surveySubtitleEl.value = state.surveySubtitle;
+                    unitOptionsEl.value = state.units.join(";");
+
+                    resetQuestionForm();
+                    renderAll();
+                    setStatus("JSON konfiguracija uvožena.");
+                } catch {
+                    setStatus("Napaka pri uvozu JSON datoteke.");
+                }
+            };
+
+            reader.readAsText(file, "utf-8");
+        }
+
+        function buildSurveyHtml(config) {
+            const json = JSON.stringify(config).replace(/<\/script>/gi, "<\\/script>");
+
+            return `<!DOCTYPE html>
+<html lang="sl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(config.surveyTitle)}</title>
+    <style>
+        :root {
+            --bg: #f6f8fb;
+            --panel: #ffffff;
+            --line: #d9e1ec;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+            --radius: 16px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 20px;
+        }
+
+        .wrap {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 18px;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-weight: 700;
+            margin: 10px 0 6px;
+        }
+
+        input[type="text"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px 12px;
+            font: inherit;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .preserve-wrap {
+            white-space: pre-wrap;
+        }
+
+        .survey-logo {
+            margin-bottom: 14px;
+            max-width: 220px;
+        }
+
+        .survey-logo img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+        }
+
+        .header-text {
+            flex: 1;
+        }
+
+        .survey-logo {
+            max-width: 200px;
+        }
+
+        .survey-logo img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .question-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .top-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .full {
+            grid-column: 1 / -1;
+        }
+
+        .yesno {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+        }
+        .units-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .units-box label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            font-weight: 400;
+        }
+
+        .child-box {
+            margin-top: 12px;
+            padding: 14px;
+            border: 1px solid #dbe3f0;
+            border-radius: 12px;
+            background: #fafcff;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .question-image {
+            margin: 10px 0 6px;
+            max-width: 100%;
+        }
+
+        .question-image img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            border: 1px solid #d9e1ec;
+            border-radius: 10px;
+        }
+
+        .answer-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 10px 12px;
+            font: inherit;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            resize: vertical;
+            background: #fff;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            margin-top: 10px;
+        }
+
+        th, td {
+            border: 1px solid #cfd8e3;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f3f6fb;
+        }
+
+        .btns {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        button {
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #f8fafc;
+        }
+
+        .no-print {
+            display: inline-block;
+        }
+
+        @media (max-width: 800px) {
+            .top-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff;
+                padding: 0;
+            }
+
+            .card {
+                box-shadow: none;
+                border: 1px solid #cfd8e3;
+                break-inside: avoid;
+            }
+
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+       <div class="card">
+    <div class="header">
+        <div class="header-text">
+            <h1>${escapeHtml(config.surveyTitle)}</h1>
+            <div class="muted preserve-wrap">${escapeHtml(config.surveySubtitle)}</div>
+        </div>
+
+        ${config.logo ? `
+            <div class="survey-logo">
+                <img src="${config.logo}" alt="Logotip" />
+            </div>
+        ` : ""}
+    </div>
+
+            <div class="btns no-print">
+                <button type="button" onclick="window.print()">Natisni / Shrani v PDF</button>
+            </div>
+
+            <div class="muted no-print" style="margin-top:10px;">
+                Ko anketo izpolnite, kliknite gumb zgoraj in dokument shranite v PDF.
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="top-grid">
+                <div class="full">
+                    <label for="personName">Ime in priimek</label>
+                    <input id="personName" type="text" />
+                </div>
+
+                <div>
+                    <label for="surveyDate">Datum</label>
+                    <input id="surveyDate" type="text" />
+                </div>
+
+                <div>
+                    <label for="surveyUnit">Enota</label>
+                    <select id="surveyUnit">
+                        <option value="">-- izberi enoto --</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="surveyContainer"></div>
+    </div>
+
+    <script>
+        const CONFIG = ${json};
+
+        function addRow(tbody, columns) {
+            const tr = document.createElement("tr");
+
+            columns.forEach(() => {
+                const td = document.createElement("td");
+                const input = document.createElement("input");
+                input.type = "text";
+                td.appendChild(input);
+                tr.appendChild(td);
+            });
+
+            tbody.appendChild(tr);
+        }
+
+        function questionAppliesToUnit(question, selectedUnit) {
+            if (!question.units || question.units.length === 0) return true;
+            if (!selectedUnit) return true;
+            return question.units.includes(selectedUnit);
+        }
+
+        function renderSurvey() {
+            const unitSelect = document.getElementById("surveyUnit");
+
+            if (!unitSelect.dataset.loaded) {
+                (CONFIG.units || []).forEach(unit => {
+                    const opt = document.createElement("option");
+                    opt.value = unit;
+                    opt.textContent = unit;
+                    unitSelect.appendChild(opt);
+                });
+                unitSelect.dataset.loaded = "1";
+            }
+
+            const selectedUnit = unitSelect.value;
+            const container = document.getElementById("surveyContainer");
+            let visibleIndex = 0;
+            container.innerHTML = "";
+
+            (CONFIG.questions || []).forEach((q) => {
+                if (!questionAppliesToUnit(q, selectedUnit)) return;
+
+                visibleIndex += 1;
+
+                const card = document.createElement("div");
+                card.className = "card";
+
+                const title = document.createElement("div");
+                title.className = "question-title";
+                title.textContent = visibleIndex + ". " + (q.text || "");
+                card.appendChild(title);
+
+                if (q.image) {
+                    const imgWrap = document.createElement("div");
+                    imgWrap.className = "question-image";
+
+                    const img = document.createElement("img");
+                    img.src = q.image;
+                    img.alt = "Slika vprašanja";
+
+                    imgWrap.appendChild(img);
+                    card.appendChild(imgWrap);
+                }
+
+                if (q.type === "text_long") {
+                    const textarea = document.createElement("textarea");
+                    textarea.className = "answer-textarea";
+                    textarea.placeholder = "Vpiši odgovor...";
+                    card.appendChild(textarea);
+                } else {
+                    const yesno = document.createElement("div");
+                    yesno.className = "yesno";
+
+                    const yesLabel = document.createElement("label");
+                    const yesRadio = document.createElement("input");
+                    yesRadio.type = "radio";
+                    yesRadio.name = "q_" + index;
+                    yesRadio.value = "DA";
+                    yesLabel.appendChild(yesRadio);
+                    yesLabel.append(" DA");
+
+                    const noLabel = document.createElement("label");
+                    const noRadio = document.createElement("input");
+                    noRadio.type = "radio";
+                    noRadio.name = "q_" + index;
+                    noRadio.value = "NE";
+                    noLabel.appendChild(noRadio);
+                    noLabel.append(" NE");
+
+                    yesno.appendChild(yesLabel);
+                    yesno.appendChild(noLabel);
+                    card.appendChild(yesno);
+
+                    if (q.child) {
+                        const child = document.createElement("div");
+                        child.className = "child-box hidden";
+
+                        const childTitle = document.createElement("div");
+                        childTitle.className = "preserve-wrap";
+
+                        const strong = document.createElement("strong");
+                        strong.textContent = q.child.text || "";
+
+                        childTitle.appendChild(strong);
+                        child.appendChild(childTitle);
+
+                        if (q.child.image) {
+                            const childImgWrap = document.createElement("div");
+                            childImgWrap.className = "question-image";
+
+                            const childImg = document.createElement("img");
+                            childImg.src = q.child.image;
+                            childImg.alt = "Slika podvprašanja";
+
+                            childImgWrap.appendChild(childImg);
+                            child.appendChild(childImgWrap);
+                        }
+
+                        const table = document.createElement("table");
+
+                        const thead = document.createElement("thead");
+                        const headRow = document.createElement("tr");
+
+                        (q.child.columns || []).forEach(col => {
+                            const th = document.createElement("th");
+                            th.textContent = col;
+                            headRow.appendChild(th);
+                        });
+
+                        thead.appendChild(headRow);
+                        table.appendChild(thead);
+
+                        const tbody = document.createElement("tbody");
+                        table.appendChild(tbody);
+
+                        addRow(tbody, q.child.columns || []);
+                        child.appendChild(table);
+
+                        const addBtn = document.createElement("button");
+                        addBtn.type = "button";
+                        addBtn.className = "no-print";
+                        addBtn.textContent = "+ Dodaj vrstico";
+                        addBtn.style.marginTop = "10px";
+                        addBtn.addEventListener("click", () => addRow(tbody, q.child.columns || []));
+                        child.appendChild(addBtn);
+
+                        yesRadio.addEventListener("change", () => {
+                            if (yesRadio.checked) child.classList.remove("hidden");
+                        });
+
+                        noRadio.addEventListener("change", () => {
+                            if (noRadio.checked) child.classList.add("hidden");
+                        });
+
+                        card.appendChild(child);
+                    }
+                }
+
+                container.appendChild(card);
+            });
+        }
+
+        document.getElementById("surveyUnit").addEventListener("change", renderSurvey);
+        renderSurvey();
+    <\/script>
+</body>
+</html>`;
+        }
+
+        function exportSurvey() {
+            syncSettingsFromInputs();
+            const html = buildSurveyHtml(state);
+            const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+            downloadBlob(blob, "anketa.html");
+            setStatus("Datoteka anketa.html je bila izvožena.");
+        }
+
+        hasChildEl.addEventListener("change", updateQuestionTypeUI);
+        qTypeEl.addEventListener("change", updateQuestionTypeUI);
+
+        surveyTitleEl.addEventListener("input", renderPreview);
+        surveySubtitleEl.addEventListener("input", renderPreview);
+        unitOptionsEl.addEventListener("input", () => {
+            const selected = getSelectedQuestionUnits();
+            renderUnitCheckboxes(selected);
+            renderPreview();
+        });
+
+        document.getElementById("saveQuestionBtn").addEventListener("click", saveQuestion);
+        document.getElementById("resetQuestionBtn").addEventListener("click", () => {
+            resetQuestionForm();
+            setStatus("Obrazec počiščen.");
+        });
+
+        document.getElementById("exportConfigBtn").addEventListener("click", exportConfig);
+        document.getElementById("exportSurveyBtn").addEventListener("click", exportSurvey);
+
+        document.getElementById("importConfigBtn").addEventListener("click", () => {
+            document.getElementById("importConfigInput").click();
+        });
+
+        document.getElementById("importConfigInput").addEventListener("change", (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (file) importConfig(file);
+            e.target.value = "";
+        });
+
+        renderAll();
+        renderUnitCheckboxes([]);
+        updateQuestionTypeUI();
+
+        window.editQuestion = editQuestion;
+        window.deleteQuestion = deleteQuestion;
+        window.moveQuestion = moveQuestion;
+
+        function fileToDataUrl(file) {
+            return new Promise((resolve, reject) => {
+                if (!file) {
+                    resolve("");
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+    </script>
+</body>
+</html>
