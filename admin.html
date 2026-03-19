@@ -436,7 +436,10 @@ v prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.
 
 Lep pozdrav</textarea>
 
-                    <div class="hint">Uporabi oznako <strong>{enota}</strong> v zadevi ali sporočilu, da se samodejno zamenja z izbrano enoto uporabnika.</div>
+                    <label for="surveyPdfFileName">Predloga imena PDF datoteke</label>
+                    <input id="surveyPdfFileName" type="text" value="anketa-{enota}" />
+
+                    <div class="hint">Uporabi oznako <strong>{enota}</strong> v zadevi, sporočilu ali imenu PDF-ja, da se samodejno zamenja z izbrano enoto uporabnika.</div>
                 </div>
 
                 <div class="section">
@@ -537,6 +540,7 @@ Lep pozdrav</textarea>
             emailRecipient: "",
             emailSubject: "Izpolnjena anketa - PDF - {enota}",
             emailMessage: "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav",
+            pdfFileName: "anketa-{enota}",
             logo: "",
             units: ["OKZP", "FIS", "FDT", "BRN", "MBX", "POW", "CEK"],
             questions: []
@@ -550,6 +554,7 @@ Lep pozdrav</textarea>
         const surveyEmailEl = document.getElementById("surveyEmail");
         const surveyEmailSubjectEl = document.getElementById("surveyEmailSubject");
         const surveyEmailMessageEl = document.getElementById("surveyEmailMessage");
+        const surveyPdfFileNameEl = document.getElementById("surveyPdfFileName");
         const qTextEl = document.getElementById("qText");
         const qTypeEl = document.getElementById("qType");
         const hasChildEl = document.getElementById("hasChild");
@@ -633,6 +638,7 @@ Lep pozdrav</textarea>
             state.emailRecipient = surveyEmailEl.value.trim();
             state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjena anketa - PDF - {enota}";
             state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
+            state.pdfFileName = surveyPdfFileNameEl.value.trim() || "anketa-{enota}";
         }
 
         function resetQuestionForm() {
@@ -1079,6 +1085,7 @@ Lep pozdrav</textarea>
                     state.emailRecipient = data.emailRecipient || "";
                     state.emailSubject = data.emailSubject || "Izpolnjena anketa - PDF - {enota}";
                     state.emailMessage = data.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
+                    state.pdfFileName = data.pdfFileName || "anketa-{enota}";
                     state.logo = data.logo || "";
                     state.questions = Array.isArray(data.questions)
                         ? data.questions.map(normalizeQuestion)
@@ -1090,6 +1097,7 @@ Lep pozdrav</textarea>
                     surveyEmailEl.value = state.emailRecipient || "";
                     surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjena anketa - PDF - {enota}";
                     surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
+                    surveyPdfFileNameEl.value = state.pdfFileName || "anketa-{enota}";
 
                     resetQuestionForm();
                     renderAll();
@@ -1618,6 +1626,18 @@ Lep pozdrav</textarea>
                 .replaceAll("[enota]", unit);
         }
 
+        function getPdfFileName() {
+            const baseName = applyMailPlaceholders(CONFIG.pdfFileName || "anketa-{enota}")
+                .trim()
+                .replace(/[\\/:*?"<>|]+/g, "-")
+                .replace(/\s+/g, " ");
+            return (baseName || "anketa") + ".pdf";
+        }
+
+        function updateDocumentTitleForPdf() {
+            document.title = getPdfFileName().replace(/\.pdf$/i, "");
+        }
+
         function openMailClient() {
             const recipient = (CONFIG.emailRecipient || "").trim();
             if (!recipient) {
@@ -1629,18 +1649,39 @@ Lep pozdrav</textarea>
             const rawBody = applyMailPlaceholders(CONFIG.emailMessage || "");
             const subject = encodeURIComponent(rawSubject);
             const body = encodeURIComponent(rawBody.split("\\n").join("\\r\\n"));
-            window.location.href = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
+            const link = document.createElement("a");
+            link.href = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
         }
 
         function printAndMail() {
-            window.print();
-
-            setTimeout(() => {
+            let mailOpened = false;
+            const openMailOnce = () => {
+                if (mailOpened) return;
+                mailOpened = true;
                 openMailClient();
                 setTimeout(() => {
                     alert("PDF pripni ročno v email. Brskalnik zaradi varnosti ne more samodejno priložiti lokalno shranjenega PDF-ja.");
                 }, 300);
-            }, 500);
+            };
+
+            updateDocumentTitleForPdf();
+
+            const afterPrintHandler = () => {
+                window.removeEventListener("afterprint", afterPrintHandler);
+                openMailOnce();
+            };
+
+            window.addEventListener("afterprint", afterPrintHandler);
+            window.print();
+
+            setTimeout(() => {
+                window.removeEventListener("afterprint", afterPrintHandler);
+                openMailOnce();
+            }, 1200);
         }
 
         function renderSurvey() {
@@ -1792,6 +1833,7 @@ Lep pozdrav</textarea>
         }
 
         document.getElementById("surveyUnit").addEventListener("change", () => {
+            updateDocumentTitleForPdf();
             renderSurvey();
             try {
                 localStorage.setItem("anketaDraftBackup", JSON.stringify(collectDraft()));
@@ -1805,7 +1847,10 @@ Lep pozdrav</textarea>
             } catch {}
         });
 
-        document.getElementById("printPdfBtn").addEventListener("click", () => window.print());
+        document.getElementById("printPdfBtn").addEventListener("click", () => {
+            updateDocumentTitleForPdf();
+            window.print();
+        });
         document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
         document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
         document.getElementById("loadDraftBtn").addEventListener("click", () => document.getElementById("loadDraftInput").click());
@@ -1815,6 +1860,7 @@ Lep pozdrav</textarea>
             e.target.value = "";
         });
 
+        updateDocumentTitleForPdf();
         renderSurvey();
 
         try {
@@ -1844,6 +1890,7 @@ Lep pozdrav</textarea>
         surveyEmailEl.addEventListener("input", renderPreview);
         surveyEmailSubjectEl.addEventListener("input", renderPreview);
         surveyEmailMessageEl.addEventListener("input", renderPreview);
+        surveyPdfFileNameEl.addEventListener("input", renderPreview);
         unitOptionsEl.addEventListener("input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
@@ -1873,6 +1920,7 @@ Lep pozdrav</textarea>
         surveyEmailEl.value = state.emailRecipient || "";
         surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjena anketa - PDF - {enota}";
         surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
+        surveyPdfFileNameEl.value = state.pdfFileName || "anketa-{enota}";
 
         renderAll();
         renderUnitCheckboxes([]);
