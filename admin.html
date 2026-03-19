@@ -417,6 +417,25 @@
                 </div>
 
                 <div class="section">
+                    <h2>Nastavitve za pošiljanje</h2>
+
+                    <label for="surveyEmail">Email za pošiljanje PDF</label>
+                    <input id="surveyEmail" type="text" placeholder="npr. ankete@podjetje.si" />
+
+                    <label for="surveyEmailSubject">Zadeva emaila</label>
+                    <input id="surveyEmailSubject" type="text" value="Izpolnjena anketa - PDF - {enota}" />
+
+                    <label for="surveyEmailMessage">Sporočilo emaila</label>
+                    <textarea id="surveyEmailMessage">Pozdravljeni,
+
+v prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.
+
+Lep pozdrav</textarea>
+
+                    <div class="hint">Uporabi oznako <strong>{enota}</strong> v zadevi ali sporočilu, da se samodejno zamenja z izbrano enoto uporabnika.</div>
+                </div>
+
+                <div class="section">
                     <h2>Vprašanje</h2>
 
                     <label for="qText">Besedilo vprašanja</label>
@@ -511,6 +530,9 @@
         const state = {
             surveyTitle: "Interna anketa",
             surveySubtitle: "Izpolnite anketo. Na koncu kliknite »Natisni / Shrani v PDF« in PDF pošljite po emailu.",
+            emailRecipient: "",
+            emailSubject: "Izpolnjena anketa - PDF - {enota}",
+            emailMessage: "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav",
             logo: "",
             units: ["OKZP", "FIS", "FDT", "BRN", "MBX", "POW", "CEK"],
             questions: []
@@ -521,6 +543,9 @@
         const surveyTitleEl = document.getElementById("surveyTitle");
         const surveySubtitleEl = document.getElementById("surveySubtitle");
         const unitOptionsEl = document.getElementById("unitOptions");
+        const surveyEmailEl = document.getElementById("surveyEmail");
+        const surveyEmailSubjectEl = document.getElementById("surveyEmailSubject");
+        const surveyEmailMessageEl = document.getElementById("surveyEmailMessage");
         const qTextEl = document.getElementById("qText");
         const qTypeEl = document.getElementById("qType");
         const hasChildEl = document.getElementById("hasChild");
@@ -601,6 +626,9 @@
                 .split(";")
                 .map(x => x.trim())
                 .filter(Boolean);
+            state.emailRecipient = surveyEmailEl.value.trim();
+            state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjena anketa - PDF - {enota}";
+            state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
         }
 
         function resetQuestionForm() {
@@ -1044,6 +1072,9 @@
                     state.surveyTitle = data.surveyTitle || "Interna anketa";
                     state.surveySubtitle = data.surveySubtitle || "";
                     state.units = Array.isArray(data.units) ? data.units : [];
+                    state.emailRecipient = data.emailRecipient || "";
+                    state.emailSubject = data.emailSubject || "Izpolnjena anketa - PDF - {enota}";
+                    state.emailMessage = data.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
                     state.logo = data.logo || "";
                     state.questions = Array.isArray(data.questions)
                         ? data.questions.map(normalizeQuestion)
@@ -1052,6 +1083,9 @@
                     surveyTitleEl.value = state.surveyTitle;
                     surveySubtitleEl.value = state.surveySubtitle;
                     unitOptionsEl.value = state.units.join(";");
+                    surveyEmailEl.value = state.emailRecipient || "";
+                    surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjena anketa - PDF - {enota}";
+                    surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
 
                     resetQuestionForm();
                     renderAll();
@@ -1355,13 +1389,6 @@
         ` : ""}
     </div>
 
-            <div class="btns no-print">
-                <button type="button" onclick="window.print()">Natisni / Shrani v PDF</button>
-            </div>
-
-            <div class="muted no-print" style="margin-top:10px;">
-                Ko anketo izpolnite, kliknite gumb zgoraj in dokument shranite v PDF.
-            </div>
         </div>
 
         <div class="card">
@@ -1386,6 +1413,20 @@
         </div>
 
         <div id="surveyContainer"></div>
+
+        <div class="card no-print">
+            <div class="btns">
+                <button type="button" id="printPdfBtn">Natisni / Shrani v PDF</button>
+                <button type="button" id="printAndMailBtn">Shrani PDF in pošlji</button>
+                <button type="button" id="saveDraftBtn">Shrani osnutek</button>
+                <button type="button" id="loadDraftBtn">Uvozi osnutek</button>
+                <input id="loadDraftInput" type="file" accept=".json,application/json" class="hidden" />
+            </div>
+
+            <div class="muted" style="margin-top:10px;">
+                Ko anketo izpolnite, jo spodaj natisnite v PDF, odprite email ali shranite osnutek za kasnejši uvoz.
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1409,6 +1450,193 @@
             if (!question.units || question.units.length === 0) return true;
             if (!selectedUnit) return true;
             return question.units.includes(selectedUnit);
+        }
+
+        function downloadBlob(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        function getVisibleQuestionConfigs() {
+            const selectedUnit = document.getElementById("surveyUnit").value;
+            return (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+        }
+
+        function collectDraft() {
+            const visibleQuestions = getVisibleQuestionConfigs();
+            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card"));
+
+            return {
+                version: 1,
+                surveyTitle: CONFIG.surveyTitle || "",
+                selectedUnit: document.getElementById("surveyUnit").value || "",
+                personName: document.getElementById("personName").value || "",
+                surveyDate: document.getElementById("surveyDate").value || "",
+                answers: cards.map((card, index) => {
+                    const q = visibleQuestions[index] || {};
+                    const answer = {
+                        questionId: q.id || null,
+                        type: q.type || null
+                    };
+
+                    if (q.type === "text_long") {
+                        answer.text = card.querySelector(".answer-textarea")?.value || "";
+                    } else {
+                        answer.choice = card.querySelector("input[type='radio']:checked")?.value || "";
+                    }
+
+                    if (q.child) {
+                        const childBox = card.querySelector(".child-box");
+                        const childAnswer = {
+                            visible: childBox ? !childBox.classList.contains("hidden") : false,
+                            type: q.child.type
+                        };
+
+                        if (q.child.type === "text") {
+                            childAnswer.text = childBox?.querySelector(".answer-textarea")?.value || "";
+                        } else if (childBox) {
+                            childAnswer.rows = Array.from(childBox.querySelectorAll("tbody tr")).map(tr =>
+                                Array.from(tr.querySelectorAll("input")).map(input => input.value || "")
+                            );
+                        }
+
+                        answer.child = childAnswer;
+                    }
+
+                    return answer;
+                })
+            };
+        }
+
+        function saveDraftToFile() {
+            const draft = collectDraft();
+            const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json;charset=utf-8" });
+            downloadBlob(blob, "anketa-osnutek.json");
+            try {
+                localStorage.setItem("anketaDraftBackup", JSON.stringify(draft));
+            } catch {}
+        }
+
+        function applyDraft(draft) {
+            if (!draft || typeof draft !== "object") {
+                alert("Osnutek ni veljaven.");
+                return;
+            }
+
+            const selectedUnit = draft.selectedUnit || "";
+            document.getElementById("personName").value = draft.personName || "";
+            document.getElementById("surveyDate").value = draft.surveyDate || "";
+            document.getElementById("surveyUnit").value = selectedUnit;
+            renderSurvey();
+
+            const visibleQuestions = getVisibleQuestionConfigs();
+            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card"));
+
+            (draft.answers || []).forEach((answer, index) => {
+                const q = visibleQuestions[index];
+                const card = cards[index];
+                if (!q || !card) return;
+
+                if (q.type === "text_long") {
+                    const textarea = card.querySelector(".answer-textarea");
+                    if (textarea) textarea.value = answer.text || "";
+                } else if (answer.choice) {
+                    const radio = card.querySelector('input[type="radio"][value="' + answer.choice + '"]');
+                    if (radio) {
+                        radio.checked = true;
+                        radio.dispatchEvent(new Event("change"));
+                    }
+                }
+
+                if (q.child && answer.child) {
+                    const childBox = card.querySelector(".child-box");
+                    if (!childBox) return;
+
+                    if (answer.child.visible) {
+                        childBox.classList.remove("hidden");
+                    } else {
+                        childBox.classList.add("hidden");
+                    }
+
+                    if (q.child.type === "text") {
+                        const childTextarea = childBox.querySelector(".answer-textarea");
+                        if (childTextarea) childTextarea.value = answer.child.text || "";
+                    } else if (Array.isArray(answer.child.rows)) {
+                        const tbody = childBox.querySelector("tbody");
+                        if (tbody) {
+                            tbody.innerHTML = "";
+                            const columns = q.child.columns || [];
+                            if (answer.child.rows.length === 0) {
+                                addRow(tbody, columns);
+                            } else {
+                                answer.child.rows.forEach(row => {
+                                    addRow(tbody, columns);
+                                    const tr = tbody.lastElementChild;
+                                    Array.from(tr.querySelectorAll("input")).forEach((input, colIndex) => {
+                                        input.value = row[colIndex] || "";
+                                    });
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+
+            try {
+                localStorage.setItem("anketaDraftBackup", JSON.stringify(collectDraft()));
+            } catch {}
+        }
+
+        function importDraft(file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const draft = JSON.parse(e.target.result);
+                    applyDraft(draft);
+                } catch {
+                    alert("Napaka pri uvozu osnutka.");
+                }
+            };
+            reader.readAsText(file, "utf-8");
+        }
+
+        function applyMailPlaceholders(template) {
+            const unit = (document.getElementById("surveyUnit").value || "").trim();
+            return String(template || "")
+                .replaceAll("{{enota}}", unit)
+                .replaceAll("{enota}", unit)
+                .replaceAll("[enota]", unit);
+        }
+
+        function openMailClient() {
+            const recipient = (CONFIG.emailRecipient || "").trim();
+            if (!recipient) {
+                alert("Email prejemnika ni nastavljen.");
+                return;
+            }
+
+            const rawSubject = applyMailPlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Anketa") + " - PDF"));
+            const rawBody = applyMailPlaceholders(CONFIG.emailMessage || "");
+            const subject = encodeURIComponent(rawSubject);
+            const body = encodeURIComponent(rawBody.split("\\n").join("\\r\\n"));
+            window.location.href = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
+        }
+
+        function printAndMail() {
+            window.print();
+
+            setTimeout(() => {
+                openMailClient();
+                setTimeout(() => {
+                    alert("PDF pripni ročno v email. Brskalnik zaradi varnosti ne more samodejno priložiti lokalno shranjenega PDF-ja.");
+                }, 300);
+            }, 500);
         }
 
         function renderSurvey() {
@@ -1559,8 +1787,38 @@
             });
         }
 
-        document.getElementById("surveyUnit").addEventListener("change", renderSurvey);
+        document.getElementById("surveyUnit").addEventListener("change", () => {
+            renderSurvey();
+            try {
+                localStorage.setItem("anketaDraftBackup", JSON.stringify(collectDraft()));
+            } catch {}
+        });
+
+        document.addEventListener("input", (event) => {
+            if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            try {
+                localStorage.setItem("anketaDraftBackup", JSON.stringify(collectDraft()));
+            } catch {}
+        });
+
+        document.getElementById("printPdfBtn").addEventListener("click", () => window.print());
+        document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
+        document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
+        document.getElementById("loadDraftBtn").addEventListener("click", () => document.getElementById("loadDraftInput").click());
+        document.getElementById("loadDraftInput").addEventListener("change", (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (file) importDraft(file);
+            e.target.value = "";
+        });
+
         renderSurvey();
+
+        try {
+            const backup = localStorage.getItem("anketaDraftBackup");
+            if (backup) {
+                applyDraft(JSON.parse(backup));
+            }
+        } catch {}
     <\/script>
 </body>
 </html>`;
@@ -1579,6 +1837,9 @@
 
         surveyTitleEl.addEventListener("input", renderPreview);
         surveySubtitleEl.addEventListener("input", renderPreview);
+        surveyEmailEl.addEventListener("input", renderPreview);
+        surveyEmailSubjectEl.addEventListener("input", renderPreview);
+        surveyEmailMessageEl.addEventListener("input", renderPreview);
         unitOptionsEl.addEventListener("input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
@@ -1605,6 +1866,9 @@
         });
 
         state.questions = state.questions.map(normalizeQuestion);
+        surveyEmailEl.value = state.emailRecipient || "";
+        surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjena anketa - PDF - {enota}";
+        surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
 
         renderAll();
         renderUnitCheckboxes([]);
