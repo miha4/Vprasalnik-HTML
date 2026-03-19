@@ -551,6 +551,11 @@
                 .replaceAll('"', "&quot;");
         }
 
+        function renderRichText(html) {
+            return String(html ?? "");
+        }
+
+
         function normalizeColumns(value) {
             return String(value || "")
                 .split(";")
@@ -867,7 +872,7 @@
             <div class="question-head">
                 <div>
                     <div class="badge">Vprašanje ${index + 1}</div>
-                    <div><strong>${escapeHtml(q.text)}</strong></div>
+                    <div><strong>${renderRichText(q.text)}</strong></div>
 
                     <div class="hint">
                         Tip: ${escapeHtml(q.type === "yesno" ? "DA / NE" : "Tekstovni odgovor")}
@@ -884,7 +889,7 @@
 
                     ${q.child ? `
                         <div class="hint" style="margin-top:6px;">
-                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): ${escapeHtml(q.child.text)}
+                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): ${renderRichText(q.child.text)}
                             ${q.child.type === "table" ? `<br>Stolpci: ${escapeHtml((q.child.columns || []).join("; "))}` : ""}
                         </div>
                     ` : ""}
@@ -950,7 +955,7 @@
             state.questions.forEach((q, index) => {
                 html += `
             <div class="survey-card">
-                <div class="survey-title">${index + 1}. ${escapeHtml(q.text)}</div>
+                <div class="survey-title">${index + 1}. ${renderRichText(q.text)}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
                                             ? "Velja za vse enote"
@@ -975,7 +980,7 @@
 
                 ${q.child ? `
                     <div class="child-box">
-                        <div class="preserve-wrap"><strong>${escapeHtml(q.child.text)}</strong></div>
+                        <div class="preserve-wrap"><strong>${renderRichText(q.child.text)}</strong></div>
 
                         ${q.child.image ? `
                             <div class="question-image">
