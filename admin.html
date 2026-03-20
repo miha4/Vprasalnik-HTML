@@ -1647,7 +1647,7 @@ Lep pozdrav</textarea>
             const rawSubject = applyMailPlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Anketa") + " - PDF"));
             const rawBody = applyMailPlaceholders(CONFIG.emailMessage || "");
             const subject = encodeURIComponent(rawSubject);
-            const body = encodeURIComponent(rawBody.split("\n").join("\r\n"));
+            const body = encodeURIComponent(rawBody.split("\\n").join("\\r\\n"));
             const mailtoUrl = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
 
             try {
