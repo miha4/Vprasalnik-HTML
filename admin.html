@@ -26,6 +26,7 @@
         body {
             margin: 0;
             font-family: Arial, sans-serif;
+            font-size: 15px;
             background: var(--bg);
             color: var(--text);
         }
@@ -1159,6 +1160,7 @@ Lep pozdrav</textarea>
         body {
             margin: 0;
             font-family: Arial, sans-serif;
+            font-size: 15px;
             background: var(--bg);
             color: var(--text);
             padding: 20px;
@@ -1639,46 +1641,42 @@ Lep pozdrav</textarea>
             const recipient = (CONFIG.emailRecipient || "").trim();
             if (!recipient) {
                 alert("Email prejemnika ni nastavljen.");
-                return;
+                return false;
             }
 
             const rawSubject = applyMailPlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Anketa") + " - PDF"));
             const rawBody = applyMailPlaceholders(CONFIG.emailMessage || "");
             const subject = encodeURIComponent(rawSubject);
-            const body = encodeURIComponent(rawBody.split("\\n").join("\\r\\n"));
-            const link = document.createElement("a");
-            link.href = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
-            link.style.display = "none";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
+            const body = encodeURIComponent(rawBody.split("\n").join("\r\n"));
+            const mailtoUrl = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
+
+            try {
+                window.location.href = mailtoUrl;
+                return true;
+            } catch {
+                const link = document.createElement("a");
+                link.href = mailtoUrl;
+                link.style.display = "none";
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                return true;
+            }
         }
 
         function printAndMail() {
-            let mailOpened = false;
-            const openMailOnce = () => {
-                if (mailOpened) return;
-                mailOpened = true;
-                openMailClient();
-                setTimeout(() => {
-                    alert("PDF pripni ročno v email. Brskalnik zaradi varnosti ne more samodejno priložiti lokalno shranjenega PDF-ja.");
-                }, 300);
-            };
-
             updateDocumentTitleForPdf();
 
-            const afterPrintHandler = () => {
-                window.removeEventListener("afterprint", afterPrintHandler);
-                openMailOnce();
-            };
-
-            window.addEventListener("afterprint", afterPrintHandler);
-            window.print();
-
+            const mailOpened = openMailClient();
             setTimeout(() => {
-                window.removeEventListener("afterprint", afterPrintHandler);
-                openMailOnce();
-            }, 1200);
+                window.print();
+            }, 250);
+
+            if (mailOpened) {
+                setTimeout(() => {
+                    alert("PDF pripni ročno v email. Brskalnik zaradi varnosti ne more samodejno priložiti lokalno shranjenega PDF-ja.");
+                }, 700);
+            }
         }
 
         function renderSurvey() {
