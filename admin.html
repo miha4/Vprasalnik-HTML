@@ -106,23 +106,6 @@
             padding: 18px;
         }
 
-        .admin-panel-title {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 18px;
-        }
-
-        .admin-panel-title h2 {
-            margin: 0;
-        }
-
-        .section-divider {
-            margin: 0 0 18px;
-            border: 0;
-            border-top: 1px solid #d9e1ec;
-        }
-
         .section {
             margin: 0;
         }
@@ -1515,6 +1498,7 @@ Lep pozdrav
                 <button type="button" id="printAndMailBtn">Shrani PDF in pošlji</button>
                 <button type="button" id="saveDraftBtn">Shrani osnutek</button>
                 <button type="button" id="loadDraftBtn">Uvozi osnutek</button>
+                <button type="button" id="resetAnswersBtn">Počisti odgovore</button>
                 <input id="loadDraftInput" type="file" accept=".json,application/json" class="hidden" />
             </div>
 
@@ -1650,6 +1634,26 @@ Lep pozdrav
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
+        }
+
+        function clearDraftBackup() {
+            try {
+                localStorage.removeItem("VprašalnikDraftBackup");
+            } catch {}
+        }
+
+        function resetSurveyAnswers() {
+            if (!confirm("Ali želiš pobrisati vse vnesene odgovore in lokalno shranjen osnutek?")) return;
+
+            document.getElementById("personName").value = "";
+            document.getElementById("surveyDate").value = "";
+            document.getElementById("surveyUnit").value = "";
+
+            renderSurvey();
+            clearDraftBackup();
+            updateDocumentTitleForPdf();
+
+            alert("Vsi odgovori in lokalno shranjen osnutek so bili pobrisani.");
         }
 
         function applyDraft(draft) {
@@ -1964,6 +1968,7 @@ Lep pozdrav
         document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
         document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
         document.getElementById("loadDraftBtn").addEventListener("click", () => document.getElementById("loadDraftInput").click());
+        document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
         document.getElementById("loadDraftInput").addEventListener("change", (e) => {
             const file = e.target.files && e.target.files[0];
             if (file) importDraft(file);
