@@ -1035,10 +1035,17 @@ Lep pozdrav
                 return;
             }
 
-            state.questions.forEach((q, index) => {
+            let previewQuestionNumber = 0;
+
+            state.questions.forEach((q) => {
+                const showQuestionNumber = q.type !== "text_block";
+                if (showQuestionNumber) {
+                    previewQuestionNumber += 1;
+                }
+
                 html += `
             <div class="survey-card">
-                <div class="survey-title">${index + 1}. ${renderRichText(applyAdminPlaceholders(q.text))}</div>
+                <div class="survey-title">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
                                             ? "Velja za vse enote"
@@ -1058,7 +1065,6 @@ Lep pozdrav
                         <label><input type="radio" name="preview_q_${index}" /> NE</label>
                     </div>
                 ` : q.type === "text_block" ? `
-                    <div class="hint">To vprašanje je samo informativni tekstovni blok brez polja za odgovor.</div>
                 ` : `
                     <textarea class="answer-textarea" placeholder="Vpiši odgovor..."></textarea>
                 `}
@@ -1827,14 +1833,17 @@ Lep pozdrav
             (CONFIG.questions || []).forEach((q) => {
                 if (!questionAppliesToUnit(q, selectedUnit)) return;
 
-                visibleIndex += 1;
+                const showQuestionNumber = q.type !== "text_block";
+                if (showQuestionNumber) {
+                    visibleIndex += 1;
+                }
 
                 const card = document.createElement("div");
                 card.className = "card";
 
                 const title = document.createElement("div");
                 title.className = "question-title";
-                title.innerHTML = visibleIndex + ". " + applyRuntimePlaceholders(q.text || "");
+                title.innerHTML = (showQuestionNumber ? visibleIndex + ". " : "") + applyRuntimePlaceholders(q.text || "");
                 card.appendChild(title);
 
                 if (q.image) {
