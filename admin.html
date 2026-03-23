@@ -403,8 +403,12 @@
                 <div class="section">
                     <h2>Nastavitve ankete</h2>
 
+                    <label for="surveyPeriod">Obdobje</label>
+                    <input id="surveyPeriod" type="text" value="2026C" placeholder="npr. 2026C ali 2026A" />
+                    <div class="hint">Vrednost se uporabi kot <strong>{obdobje}</strong> v naslovu, emailu, PDF imenu in besedilih vprašanj.</div>
+
                     <label for="surveyTitle">Naslov ankete</label>
-                    <input id="surveyTitle" type="text" value=" Vprašalnik" />
+                    <input id="surveyTitle" type="text" value="Vprašalnik {obdobje}" />
 
                     <label for="surveySubtitle">Navodilo</label>
                     <textarea id="surveySubtitle">Izpolnite anketo. Na koncu kliknite »Natisni / Shrani v PDF« in PDF pošljite po emailu.</textarea>
@@ -425,19 +429,20 @@
                     <input id="surveyEmail" type="text" placeholder="npr. ankete@podjetje.si" />
 
                     <label for="surveyEmailSubject">Zadeva emaila</label>
-                    <input id="surveyEmailSubject" type="text" value="Izpolnjen Vprašalnik - PDF - {enota}" />
+                    <input id="surveyEmailSubject" type="text" value="Izpolnjen vprašalnik {obdobje} - {enota}" />
 
                     <label for="surveyEmailMessage">Sporočilo emaila</label>
                     <textarea id="surveyEmailMessage">Pozdravljeni,
 
 v prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.
 
-Lep pozdrav</textarea>
+Lep pozdrav
+{imeinpriimek}</textarea>
 
                     <label for="surveyPdfFileName">Predloga imena PDF datoteke</label>
-                    <input id="surveyPdfFileName" type="text" value="Vprašalnik-{enota}" />
+                    <input id="surveyPdfFileName" type="text" value="Vprašalnik {obdobje} - {enota}" />
 
-                    <div class="hint">Uporabi oznako <strong>{enota}</strong> v zadevi, sporočilu ali imenu PDF-ja, da se samodejno zamenja z izbrano enoto uporabnika.</div>
+                    <div class="hint">Uporabi oznake <strong>{obdobje}</strong>, <strong>{enota}</strong> in <strong>{imeinpriimek}</strong> v naslovu, vprašanjih, zadevi, sporočilu ali imenu PDF-ja, da se samodejno zamenjajo z uporabnikovimi podatki.</div>
                 </div>
 
                 <div class="section">
@@ -533,12 +538,13 @@ Lep pozdrav</textarea>
 
     <script>
         const state = {
-            surveyTitle: "Vprašalnik",
+            surveyPeriod: "2026C",
+            surveyTitle: "Vprašalnik {obdobje}",
             surveySubtitle: "Izpolnite anketo. Na koncu kliknite »Natisni / Shrani v PDF« in PDF pošljite po emailu.",
             emailRecipient: "",
-            emailSubject: "Izpolnjen vprašalnik - {enota}",
-            emailMessage: "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen vprašalnik {enota}.\n\nLep pozdrav\n\n {imeinpriimek}",
-            pdfFileName: "Vprasalnik-{enota}",
+            emailSubject: "Izpolnjen vprašalnik {obdobje} - {enota}",
+            emailMessage: "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}",
+            pdfFileName: "Vprašalnik {obdobje} - {enota}",
             logo: "",
             units: ["OKZP", "FIS", "FDT", "BRN", "MBX", "POW", "CEK"],
             questions: []
@@ -546,6 +552,7 @@ Lep pozdrav</textarea>
 
         let editIndex = -1;
 
+        const surveyPeriodEl = document.getElementById("surveyPeriod");
         const surveyTitleEl = document.getElementById("surveyTitle");
         const surveySubtitleEl = document.getElementById("surveySubtitle");
         const unitOptionsEl = document.getElementById("unitOptions");
@@ -587,6 +594,29 @@ Lep pozdrav</textarea>
             return String(html ?? "");
         }
 
+        function applyTemplatePlaceholders(template, values = {}) {
+            let result = String(template ?? "");
+            Object.entries(values).forEach(([key, value]) => {
+                const normalized = String(value ?? "");
+                result = result
+                    .replaceAll(`{{${key}}}`, normalized)
+                    .replaceAll(`{${key}}`, normalized)
+                    .replaceAll(`[${key}]`, normalized);
+            });
+            return result;
+        }
+
+        function getAdminPlaceholderValues() {
+            return {
+                obdobje: surveyPeriodEl.value.trim(),
+                enota: "{enota}",
+                imeinpriimek: "{imeinpriimek}"
+            };
+        }
+
+        function applyAdminPlaceholders(template) {
+            return applyTemplatePlaceholders(template, getAdminPlaceholderValues());
+        }
 
         function normalizeColumns(value) {
             return String(value || "")
@@ -627,16 +657,17 @@ Lep pozdrav</textarea>
         document.getElementById("surveyLogo").addEventListener("change", updateLogoFromInput);
 
         function syncSettingsFromInputs() {
-            state.surveyTitle = surveyTitleEl.value.trim() || " Vprašalnik";
+            state.surveyPeriod = surveyPeriodEl.value.trim() || "";
+            state.surveyTitle = surveyTitleEl.value.trim() || "Vprašalnik {obdobje}";
             state.surveySubtitle = surveySubtitleEl.value.trim() || "";
             state.units = unitOptionsEl.value
                 .split(";")
                 .map(x => x.trim())
                 .filter(Boolean);
             state.emailRecipient = surveyEmailEl.value.trim();
-            state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjen Vprašalnik - PDF - {enota}";
-            state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
-            state.pdfFileName = surveyPdfFileNameEl.value.trim() || "Vprašalnik-{enota}";
+            state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjen vprašalnik {obdobje} - {enota}";
+            state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
+            state.pdfFileName = surveyPdfFileNameEl.value.trim() || "Vprašalnik {obdobje} - {enota}";
         }
 
         function resetQuestionForm() {
@@ -908,7 +939,7 @@ Lep pozdrav</textarea>
             <div class="question-head">
                 <div>
                     <div class="badge">Vprašanje ${index + 1}</div>
-                    <div><strong>${renderRichText(q.text)}</strong></div>
+                    <div><strong>${renderRichText(applyAdminPlaceholders(q.text))}</strong></div>
 
                     <div class="hint">
                         Tip: ${escapeHtml(q.type === "yesno" ? "DA / NE" : "Tekstovni odgovor")}
@@ -925,7 +956,7 @@ Lep pozdrav</textarea>
 
                     ${q.child ? `
                         <div class="hint" style="margin-top:6px;">
-                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): ${renderRichText(q.child.text)}
+                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): ${renderRichText(applyAdminPlaceholders(q.child.text))}
                             ${q.child.type === "table" ? `<br>Stolpci: ${escapeHtml((q.child.columns || []).join("; "))}` : ""}
                         </div>
                     ` : ""}
@@ -959,8 +990,8 @@ Lep pozdrav</textarea>
                 </div>
             ` : ""}
 
-            <div class="survey-title">${escapeHtml(state.surveyTitle)}</div>
-            <div class="preserve-wrap" style="margin-bottom:12px; color: var(--muted);">${escapeHtml(state.surveySubtitle)}</div>
+            <div class="survey-title">${escapeHtml(applyAdminPlaceholders(state.surveyTitle))}</div>
+            <div class="preserve-wrap" style="margin-bottom:12px; color: var(--muted);">${escapeHtml(applyAdminPlaceholders(state.surveySubtitle))}</div>
 
             <div class="survey-top-grid">
                 <div class="full">
@@ -991,7 +1022,7 @@ Lep pozdrav</textarea>
             state.questions.forEach((q, index) => {
                 html += `
             <div class="survey-card">
-                <div class="survey-title">${index + 1}. ${renderRichText(q.text)}</div>
+                <div class="survey-title">${index + 1}. ${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
                                             ? "Velja za vse enote"
@@ -1016,7 +1047,7 @@ Lep pozdrav</textarea>
 
                 ${q.child ? `
                     <div class="child-box">
-                        <div class="preserve-wrap"><strong>${renderRichText(q.child.text)}</strong></div>
+                        <div class="preserve-wrap"><strong>${renderRichText(applyAdminPlaceholders(q.child.text))}</strong></div>
 
                         ${q.child.image ? `
                             <div class="question-image">
@@ -1077,25 +1108,27 @@ Lep pozdrav</textarea>
                 try {
                     const data = JSON.parse(e.target.result);
 
-                    state.surveyTitle = data.surveyTitle || " Vprašalnik";
+                    state.surveyPeriod = data.surveyPeriod || "";
+                    state.surveyTitle = data.surveyTitle || "Vprašalnik {obdobje}";
                     state.surveySubtitle = data.surveySubtitle || "";
                     state.units = Array.isArray(data.units) ? data.units : [];
                     state.emailRecipient = data.emailRecipient || "";
-                    state.emailSubject = data.emailSubject || "Izpolnjen Vprašalnik - PDF - {enota}";
-                    state.emailMessage = data.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
-                    state.pdfFileName = data.pdfFileName || "Vprašalnik-{enota}";
+                    state.emailSubject = data.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
+                    state.emailMessage = data.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
+                    state.pdfFileName = data.pdfFileName || "Vprašalnik {obdobje} - {enota}";
                     state.logo = data.logo || "";
                     state.questions = Array.isArray(data.questions)
                         ? data.questions.map(normalizeQuestion)
                         : [];
 
+                    surveyPeriodEl.value = state.surveyPeriod || "";
                     surveyTitleEl.value = state.surveyTitle;
                     surveySubtitleEl.value = state.surveySubtitle;
                     unitOptionsEl.value = state.units.join(";");
                     surveyEmailEl.value = state.emailRecipient || "";
-                    surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen Vprašalnik - PDF - {enota}";
-                    surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
-                    surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik-{enota}";
+                    surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
+                    surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
+                    surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik {obdobje} - {enota}";
 
                     resetQuestionForm();
                     renderAll();
@@ -1141,7 +1174,7 @@ Lep pozdrav</textarea>
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${escapeHtml(config.surveyTitle)}</title>
+    <title>${escapeHtml(applyTemplatePlaceholders(config.surveyTitle, { obdobje: config.surveyPeriod || "" }))}</title>
     <style>
         :root {
             --bg: #f6f8fb;
@@ -1389,8 +1422,8 @@ Lep pozdrav</textarea>
        <div class="card">
     <div class="header">
         <div class="header-text">
-            <h1>${escapeHtml(config.surveyTitle)}</h1>
-            <div class="muted preserve-wrap">${escapeHtml(config.surveySubtitle)}</div>
+            <h1>${escapeHtml(applyTemplatePlaceholders(config.surveyTitle, { obdobje: config.surveyPeriod || "" }))}</h1>
+            <div class="muted preserve-wrap">${escapeHtml(applyTemplatePlaceholders(config.surveySubtitle, { obdobje: config.surveyPeriod || "" }))}</div>
         </div>
 
         ${config.logo ? `
@@ -1442,6 +1475,40 @@ Lep pozdrav</textarea>
 
     <script>
         const CONFIG = ${json};
+
+        function applyTemplatePlaceholders(template, values = {}) {
+            let result = String(template || "");
+            Object.entries(values).forEach(([key, value]) => {
+                const normalized = String(value ?? "");
+                result = result
+                    .replaceAll("{{" + key + "}}", normalized)
+                    .replaceAll("{" + key + "}", normalized)
+                    .replaceAll("[" + key + "]", normalized);
+            });
+            return result;
+        }
+
+        function getRuntimePlaceholderValues() {
+            return {
+                obdobje: (CONFIG.surveyPeriod || "").trim(),
+                enota: (document.getElementById("surveyUnit")?.value || "").trim(),
+                imeinpriimek: (document.getElementById("personName")?.value || "").trim()
+            };
+        }
+
+        function applyRuntimePlaceholders(template) {
+            return applyTemplatePlaceholders(template, getRuntimePlaceholderValues());
+        }
+
+        function requirePersonName() {
+            const personNameInput = document.getElementById("personName");
+            const personName = (personNameInput.value || "").trim();
+            if (personName) return personName;
+
+            alert("Vnesite ime in priimek.");
+            personNameInput.focus();
+            return "";
+        }
 
         function addRow(tbody, columns) {
             const tr = document.createElement("tr");
@@ -1617,16 +1684,8 @@ Lep pozdrav</textarea>
             reader.readAsText(file, "utf-8");
         }
 
-        function applyMailPlaceholders(template) {
-            const unit = (document.getElementById("surveyUnit").value || "").trim();
-            return String(template || "")
-                .replaceAll("{{enota}}", unit)
-                .replaceAll("{enota}", unit)
-                .replaceAll("[enota]", unit);
-        }
-
         function getPdfFileName() {
-            const baseName = applyMailPlaceholders(CONFIG.pdfFileName || "Vprašalnik-{enota}")
+            const baseName = applyRuntimePlaceholders(CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota}")
                 .trim()
                 .replace(/[\\/:*?"<>|]+/g, "-")
                 .replace(/\s+/g, " ");
@@ -1644,8 +1703,11 @@ Lep pozdrav</textarea>
                 return false;
             }
 
-            const rawSubject = applyMailPlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Vprašalnik") + " - PDF"));
-            const rawBody = applyMailPlaceholders(CONFIG.emailMessage || "");
+            const personName = requirePersonName();
+            if (!personName) return false;
+
+            const rawSubject = applyRuntimePlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Vprašalnik") + " - PDF"));
+            const rawBody = applyRuntimePlaceholders(CONFIG.emailMessage || "");
             const subject = encodeURIComponent(rawSubject);
             const body = encodeURIComponent(rawBody.split("\n").join("\r\n"));
             const mailtoUrl = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
@@ -1665,6 +1727,7 @@ Lep pozdrav</textarea>
         }
 
         function printAndMail() {
+            if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
 
             const mailOpened = openMailClient();
@@ -1707,7 +1770,7 @@ Lep pozdrav</textarea>
 
                 const title = document.createElement("div");
                 title.className = "question-title";
-                title.innerHTML = visibleIndex + ". " + (q.text || "");
+                title.innerHTML = visibleIndex + ". " + applyRuntimePlaceholders(q.text || "");
                 card.appendChild(title);
 
                 if (q.image) {
@@ -1759,7 +1822,7 @@ Lep pozdrav</textarea>
                         childTitle.className = "preserve-wrap";
 
                         const strong = document.createElement("strong");
-                        strong.innerHTML = q.child.text || "";
+                        strong.innerHTML = applyRuntimePlaceholders(q.child.text || "");
 
                         childTitle.appendChild(strong);
                         child.appendChild(childTitle);
@@ -1843,6 +1906,7 @@ Lep pozdrav</textarea>
         });
 
         document.getElementById("printPdfBtn").addEventListener("click", () => {
+            if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
             window.print();
         });
@@ -1880,6 +1944,7 @@ Lep pozdrav</textarea>
         hasChildEl.addEventListener("change", updateQuestionTypeUI);
         qTypeEl.addEventListener("change", updateQuestionTypeUI);
 
+        surveyPeriodEl.addEventListener("input", renderPreview);
         surveyTitleEl.addEventListener("input", renderPreview);
         surveySubtitleEl.addEventListener("input", renderPreview);
         surveyEmailEl.addEventListener("input", renderPreview);
@@ -1912,10 +1977,14 @@ Lep pozdrav</textarea>
         });
 
         state.questions = state.questions.map(normalizeQuestion);
+        surveyPeriodEl.value = state.surveyPeriod || "";
+        surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
+        surveySubtitleEl.value = state.surveySubtitle || "";
+        unitOptionsEl.value = (state.units || []).join(";");
         surveyEmailEl.value = state.emailRecipient || "";
-        surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen Vprašalnik - PDF - {enota}";
-        surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav";
-        surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik-{enota}";
+        surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
+        surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
+        surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik {obdobje} - {enota}";
 
         renderAll();
         renderUnitCheckboxes([]);
