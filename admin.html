@@ -991,7 +991,7 @@ Lep pozdrav
             ` : ""}
 
             <div class="survey-title">${escapeHtml(applyAdminPlaceholders(state.surveyTitle))}</div>
-            <div class="preserve-wrap" style="margin-bottom:12px; color: var(--muted);">${escapeHtml(state.surveySubtitle)}</div>
+            <div class="preserve-wrap" style="margin-bottom:12px; color: var(--muted);">${escapeHtml(applyAdminPlaceholders(state.surveySubtitle))}</div>
 
             <div class="survey-top-grid">
                 <div class="full">
@@ -1423,7 +1423,7 @@ Lep pozdrav
     <div class="header">
         <div class="header-text">
             <h1>${escapeHtml(applyTemplatePlaceholders(config.surveyTitle, { obdobje: config.surveyPeriod || "" }))}</h1>
-            <div class="muted preserve-wrap">${escapeHtml(config.surveySubtitle)}</div>
+            <div class="muted preserve-wrap">${escapeHtml(applyTemplatePlaceholders(config.surveySubtitle, { obdobje: config.surveyPeriod || "" }))}</div>
         </div>
 
         ${config.logo ? `
