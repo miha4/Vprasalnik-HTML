@@ -1503,6 +1503,7 @@ Lep pozdrav
                     </select>
                 </div>
             </div>
+                <button type="button" id="resetAnswersBtn">Počisti odgovore</button>
         </div>
 
         <div id="surveyContainer"></div>
@@ -1513,7 +1514,6 @@ Lep pozdrav
                 <button type="button" id="printAndMailBtn">Shrani PDF in pošlji</button>
                 <button type="button" id="saveDraftBtn">Shrani osnutek</button>
                 <button type="button" id="loadDraftBtn">Uvozi osnutek</button>
-                <button type="button" id="resetAnswersBtn">Počisti odgovore</button>
                 <input id="loadDraftInput" type="file" accept=".json,application/json" class="hidden" />
             </div>
 
@@ -1960,7 +1960,6 @@ Lep pozdrav
                 } else {
                     const hint = document.createElement("div");
                     hint.className = "muted preserve-wrap";
-                    hint.textContent = "To vprašanje je prikazano kot tekstovni blok brez polja za odgovor.";
                     card.appendChild(hint);
                 }
 
