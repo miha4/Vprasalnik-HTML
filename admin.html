@@ -1037,7 +1037,7 @@ Lep pozdrav
 
             let previewQuestionNumber = 0;
 
-            state.questions.forEach((q) => {
+            state.questions.forEach((q, index) => {
                 const showQuestionNumber = q.type !== "text_block";
                 if (showQuestionNumber) {
                     previewQuestionNumber += 1;
