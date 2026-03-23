@@ -100,16 +100,31 @@
             padding: 18px;
         }
 
+        .admin-panel-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .admin-panel-title h2 {
+            margin: 0;
+        }
+
+        .section-divider {
+            margin: 0 0 18px;
+            border: 0;
+            border-top: 1px solid #d9e1ec;
+        }
+
         .section {
             padding-bottom: 18px;
             margin-bottom: 18px;
-            border-bottom: 1px solid #edf2f7;
         }
 
             .section:last-child {
                 margin-bottom: 0;
                 padding-bottom: 0;
-                border-bottom: 0;
             }
 
         label {
@@ -400,6 +415,12 @@
 
         <div class="layout">
             <div class="panel">
+                <div class="admin-panel-title">
+                    <span class="top-chip">Admin del</span>
+                    <h2>Urejanje ankete</h2>
+                </div>
+                <hr class="section-divider" />
+
                 <div class="section">
                     <h2>Nastavitve ankete</h2>
 
@@ -421,6 +442,8 @@
                     <input id="surveyLogo" type="file" accept="image/*" />
                     <div class="hint">Logotip se bo vgradil v končni Vprašalnik.html.</div>
                 </div>
+
+                <hr class="section-divider" />
 
                 <div class="section">
                     <h2>Nastavitve za pošiljanje</h2>
@@ -445,8 +468,10 @@ Lep pozdrav
                     <div class="hint">Uporabi oznake <strong>{obdobje}</strong>, <strong>{enota}</strong> in <strong>{imeinpriimek}</strong> v naslovu, vprašanjih, zadevi, sporočilu ali imenu PDF-ja, da se samodejno zamenjajo z uporabnikovimi podatki.</div>
                 </div>
 
+                <hr class="section-divider" />
+
                 <div class="section">
-                    <h2>Vprašanje</h2>
+                    <h2>Dodaj vprašanje</h2>
 
                     <label for="qText">Besedilo vprašanja</label>
                     <div class="rte-toolbar">
@@ -507,6 +532,8 @@ Lep pozdrav
                     <div id="status" class="status">Pripravljen.</div>
                 </div>
 
+                <hr class="section-divider" />
+
                 <div class="section">
                     <h2>Vprašanja</h2>
                     <div id="questionList" class="question-list"></div>
@@ -551,6 +578,7 @@ Lep pozdrav
         };
 
         let editIndex = -1;
+        let exportSurveyHandle = null;
 
         const surveyPeriodEl = document.getElementById("surveyPeriod");
         const surveyTitleEl = document.getElementById("surveyTitle");
@@ -1092,6 +1120,31 @@ Lep pozdrav
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
+        }
+
+        async function saveHtmlFile(fileName, htmlContent) {
+            if (window.showSaveFilePicker) {
+                const pickerOptions = {
+                    suggestedName: fileName,
+                    types: [{
+                        description: "HTML datoteka",
+                        accept: {
+                            "text/html": [".html"]
+                        }
+                    }]
+                };
+
+                const fileHandle = exportSurveyHandle || await window.showSaveFilePicker(pickerOptions);
+                const writable = await fileHandle.createWritable();
+                await writable.write(htmlContent);
+                await writable.close();
+                exportSurveyHandle = fileHandle;
+                return "saved";
+            }
+
+            const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+            downloadBlob(blob, fileName);
+            return "downloaded";
         }
 
         function exportConfig() {
@@ -1709,7 +1762,7 @@ Lep pozdrav
             const rawSubject = applyRuntimePlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Vprašalnik") + " - PDF"));
             const rawBody = applyRuntimePlaceholders(CONFIG.emailMessage || "");
             const subject = encodeURIComponent(rawSubject);
-            const body = encodeURIComponent(rawBody.split("\n").join("\r\n"));
+            const body = encodeURIComponent(rawBody.split("\\n").join("\\r\\n"));
             const mailtoUrl = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
 
             try {
@@ -1928,17 +1981,30 @@ Lep pozdrav
                 applyDraft(JSON.parse(backup));
             }
         } catch {}
-    <\/script>
+    ${"</scr" + "ipt>"}
 </body>
 </html>`;
         }
 
-        function exportSurvey() {
+        async function exportSurvey() {
             syncSettingsFromInputs();
             const html = buildSurveyHtml(state);
-            const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-            downloadBlob(blob, "Vprašalnik.html");
-            setStatus("Datoteka Vprašalnik.html je bila izvožena.");
+            try {
+                const mode = await saveHtmlFile("Vprašalnik.html", html);
+                setStatus(
+                    mode === "saved"
+                        ? "Datoteka Vprašalnik.html je bila shranjena v izbrano mapo."
+                        : "Datoteka Vprašalnik.html je bila izvožena prek prenosa brskalnika."
+                );
+            } catch (err) {
+                if (err?.name === "AbortError") {
+                    setStatus("Shranjevanje Vprašalnik.html je bilo preklicano.");
+                    return;
+                }
+
+                console.error(err);
+                setStatus("Napaka pri shranjevanju Vprašalnik.html.");
+            }
         }
 
         hasChildEl.addEventListener("change", updateQuestionTypeUI);
