@@ -463,6 +463,7 @@ Lep pozdrav
                     <select id="qType">
                         <option value="yesno">DA / NE</option>
                         <option value="text_long">Tekstovni odgovor</option>
+                        <option value="text_block">Dodaj tekstovno okno</option>
                     </select>
                     <label>Za katere enote velja vprašanje? (neobvezno)</label>
                     <div id="questionUnitsBox" class="units-box"></div>
@@ -951,7 +952,13 @@ Lep pozdrav
                     <div><strong>${renderRichText(applyAdminPlaceholders(q.text))}</strong></div>
 
                     <div class="hint">
-                        Tip: ${escapeHtml(q.type === "yesno" ? "DA / NE" : "Tekstovni odgovor")}
+                        Tip: ${escapeHtml(
+                            q.type === "yesno"
+                                ? "DA / NE"
+                                : q.type === "text_block"
+                                    ? "Dodaj tekstovno okno"
+                                    : "Tekstovni odgovor"
+                        )}
                         ${q.image ? " | ima sliko" : ""}
                         ${q.child ? " | ima podvprašanje" : ""}
                     </div>
@@ -1050,6 +1057,8 @@ Lep pozdrav
                         <label><input type="radio" name="preview_q_${index}" /> DA</label>
                         <label><input type="radio" name="preview_q_${index}" /> NE</label>
                     </div>
+                ` : q.type === "text_block" ? `
+                    <div class="hint">To vprašanje je samo informativni tekstovni blok brez polja za odgovor.</div>
                 ` : `
                     <textarea class="answer-textarea" placeholder="Vpiši odgovor..."></textarea>
                 `}
@@ -1600,7 +1609,7 @@ Lep pozdrav
 
                     if (q.type === "text_long") {
                         answer.text = card.querySelector(".answer-textarea")?.value || "";
-                    } else {
+                    } else if (q.type === "yesno") {
                         answer.choice = card.querySelector("input[type='radio']:checked")?.value || "";
                     }
 
@@ -1679,7 +1688,7 @@ Lep pozdrav
                 if (q.type === "text_long") {
                     const textarea = card.querySelector(".answer-textarea");
                     if (textarea) textarea.value = answer.text || "";
-                } else if (answer.choice) {
+                } else if (q.type === "yesno" && answer.choice) {
                     const radio = card.querySelector('input[type="radio"][value="' + answer.choice + '"]');
                     if (radio) {
                         radio.checked = true;
@@ -1845,7 +1854,7 @@ Lep pozdrav
                     textarea.className = "answer-textarea";
                     textarea.placeholder = "Vpiši odgovor...";
                     card.appendChild(textarea);
-                } else {
+                } else if (q.type === "yesno") {
                     const yesno = document.createElement("div");
                     yesno.className = "yesno";
 
@@ -1939,6 +1948,11 @@ Lep pozdrav
 
                         card.appendChild(child);
                     }
+                } else {
+                    const hint = document.createElement("div");
+                    hint.className = "muted preserve-wrap";
+                    hint.textContent = "To vprašanje je prikazano kot tekstovni blok brez polja za odgovor.";
+                    card.appendChild(hint);
                 }
 
                 container.appendChild(card);
