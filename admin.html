@@ -404,7 +404,7 @@
                     <h2>Nastavitve ankete</h2>
 
                     <label for="surveyTitle">Naslov ankete</label>
-                    <input id="surveyTitle" type="text" value="Interni Vprašalnik" />
+                    <input id="surveyTitle" type="text" value=" Vprašalnik" />
 
                     <label for="surveySubtitle">Navodilo</label>
                     <textarea id="surveySubtitle">Izpolnite anketo. Na koncu kliknite »Natisni / Shrani v PDF« in PDF pošljite po emailu.</textarea>
@@ -627,7 +627,7 @@ Lep pozdrav</textarea>
         document.getElementById("surveyLogo").addEventListener("change", updateLogoFromInput);
 
         function syncSettingsFromInputs() {
-            state.surveyTitle = surveyTitleEl.value.trim() || "Interni Vprašalnik";
+            state.surveyTitle = surveyTitleEl.value.trim() || " Vprašalnik";
             state.surveySubtitle = surveySubtitleEl.value.trim() || "";
             state.units = unitOptionsEl.value
                 .split(";")
@@ -1077,7 +1077,7 @@ Lep pozdrav</textarea>
                 try {
                     const data = JSON.parse(e.target.result);
 
-                    state.surveyTitle = data.surveyTitle || "Interni Vprašalnik";
+                    state.surveyTitle = data.surveyTitle || " Vprašalnik";
                     state.surveySubtitle = data.surveySubtitle || "";
                     state.units = Array.isArray(data.units) ? data.units : [];
                     state.emailRecipient = data.emailRecipient || "";
