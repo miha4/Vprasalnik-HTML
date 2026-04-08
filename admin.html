@@ -1240,7 +1240,6 @@ Lep pozdrav
             state.sections.forEach((section, sectionIndex) => {
                 html += `
                     <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")}; border-left:5px solid rgba(0,0,0,0.15);">
-                        <div class="top-chip">Del ${sectionIndex + 1}</div>
                         <div class="survey-title">${escapeHtml(applyAdminPlaceholders(section.title || `Del ${sectionIndex + 1}`))}</div>
                         ${section.description ? `<div class="preserve-wrap muted">${escapeHtml(applyAdminPlaceholders(section.description))}</div>` : ""}
                     </div>
@@ -1312,10 +1311,10 @@ Lep pozdrav
                 html += `
                     <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")}; border-style:dashed;">
                         <div class="btns">
-                            <button type="button">Natisni / Shrani v PDF (del ${sectionIndex + 1})</button>
-                            <button type="button">Shrani PDF in pošlji (del ${sectionIndex + 1})</button>
-                            <button type="button">Shrani osnutek (del ${sectionIndex + 1})</button>
-                            <button type="button">Uvozi osnutek (del ${sectionIndex + 1})</button>
+                            <button type="button">Natisni / Shrani v PDF</button>
+                            <button type="button">Shrani PDF in pošlji</button>
+                            <button type="button">Shrani osnutek</button>
+                            <button type="button">Uvozi osnutek</button>
                         </div>
                     </div>
                 `;
@@ -1675,6 +1674,14 @@ Lep pozdrav
 
         .section-actions {
             border-style: dashed;
+        }
+
+        .section-group {
+            margin-bottom: 16px;
+        }
+
+        .section-group .section-actions .btns button {
+            flex: 1 1 220px;
         }
 
         .print-hidden-temp {
@@ -2072,18 +2079,17 @@ Lep pozdrav
             setTimeout(() => hiddenCards.forEach(card => card.classList.remove("print-hidden-temp")), 250);
         }
 
-        function renderSectionActions(container, sectionIndex) {
+        function renderSectionActions(sectionIndex) {
             const card = document.createElement("div");
             card.className = "card no-print section-actions";
             card.innerHTML =
-                '<div><strong>Akcije za del ' + sectionIndex + '</strong></div>' +
                 '<div class="btns">' +
-                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF (del ' + sectionIndex + ')</button>' +
-                    '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji (del ' + sectionIndex + ')</button>' +
-                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani osnutek (del ' + sectionIndex + ')</button>' +
-                    '<button type="button" data-section-action="load" data-section="' + sectionIndex + '">Uvozi osnutek (del ' + sectionIndex + ')</button>' +
+                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
+                    '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji</button>' +
+                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani osnutek</button>' +
+                    '<button type="button" data-section-action="load" data-section="' + sectionIndex + '">Uvozi osnutek</button>' +
                 '</div>';
-            container.appendChild(card);
+            return card;
         }
 
         function renderSurvey() {
@@ -2113,11 +2119,10 @@ Lep pozdrav
             sections.forEach((section, sectionIndex) => {
                 const sectionNumber = sectionIndex + 1;
                 const sectionTitle = document.createElement("div");
-                sectionTitle.className = "card";
+                sectionTitle.className = "card section-group";
                 sectionTitle.dataset.section = String(sectionNumber);
                 sectionTitle.style.background = section.color || "#eef2ff";
-                sectionTitle.innerHTML = '<div class="top-chip">Del ' + sectionNumber + '</div><div class="question-title">' + applyRuntimePlaceholders(section.title || ('Del ' + sectionNumber)) + '</div>' + (section.description ? '<div class="preserve-wrap muted">' + applyRuntimePlaceholders(section.description) + '</div>' : '');
-                container.appendChild(sectionTitle);
+                sectionTitle.innerHTML = '<div class="question-title">' + applyRuntimePlaceholders(section.title || ('Del ' + sectionNumber)) + '</div>' + (section.description ? '<div class="preserve-wrap muted">' + applyRuntimePlaceholders(section.description) + '</div>' : '');
 
                 visibleQuestions.filter(q => (q.sectionId || sections[0].id) === section.id).forEach((q) => {
                 questionIndex += 1;
@@ -2255,10 +2260,11 @@ Lep pozdrav
                     card.appendChild(hint);
                 }
 
-                container.appendChild(card);
+                sectionTitle.appendChild(card);
                 });
 
-                renderSectionActions(container, sectionNumber);
+                sectionTitle.appendChild(renderSectionActions(sectionNumber));
+                container.appendChild(sectionTitle);
             });
 
             renderSectionActions(container, sectionIndex);
