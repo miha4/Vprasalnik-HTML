@@ -473,16 +473,15 @@ Lep pozdrav
                         <option value="text_long">Tekstovni odgovor</option>
                         <option value="text_block">Dodaj tekstovno okno</option>
                     </select>
+                    <label for="qSectionId">Del ankete</label>
+                    <select id="qSectionId"></select>
                     <label>Za katere enote velja vprašanje? (neobvezno)</label>
                     <div id="questionUnitsBox" class="units-box"></div>
                     <div class="hint">Če ne izbereš nobene enote, bo vprašanje prikazano vsem.</div>
 
                     <label for="questionImage">Slika vprašanja (neobvezno)</label>
                     <input id="questionImage" type="file" accept="image/*" />
-                    <div id="splitSurveyWrap" class="checkbox-row hidden">
-                        <input id="splitSurvey" type="checkbox" />
-                        <label for="splitSurvey" style="margin:0; font-weight:700;">Razdeli anketo na tem mestu</label>
-                    </div>
+                    <div id="splitSurveyWrap" class="checkbox-row hidden"></div>
 
                     <div class="hint">Slika se bo vgradila v končni Vprašalnik.html, zato uporabnik dobi samo eno datoteko.</div>
 
@@ -534,7 +533,17 @@ Lep pozdrav
                 <div class="panel">
                     <div class="section">
                         <h2>Deli ankete</h2>
-                        <div id="sectionOverview" class="question-list"></div>
+                        <label for="sectionTitle">Naslov dela</label>
+                        <input id="sectionTitle" type="text" placeholder="npr. Del 1" />
+                        <label for="sectionDescription">Opis dela</label>
+                        <textarea id="sectionDescription" placeholder="Kratek opis dela"></textarea>
+                        <label for="sectionColor">Barva dela</label>
+                        <input id="sectionColor" type="color" value="#eef2ff" style="width:56px; padding:3px;" />
+                        <div class="btns">
+                            <button id="saveSectionBtn" type="button" class="btn-primary">Dodaj del</button>
+                            <button id="resetSectionBtn" type="button">Počisti del</button>
+                        </div>
+                        <div id="sectionOverview" class="question-list" style="margin-top:10px;"></div>
                     </div>
                 </div>
 
@@ -577,26 +586,29 @@ Lep pozdrav
             pdfFileName: "Vprašalnik {obdobje} - {enota}",
             logo: "",
             units: [...DEFAULT_UNITS],
-            sectionColors: ["#ffffff", "#eef2ff", "#f0fdf4", "#fff7ed"],
+            sections: [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }],
             questions: []
         };
 
         let editIndex = -1;
+        let editSectionIndex = -1;
         let exportSurveyHandle = null;
 
         const surveyPeriodEl = document.getElementById("surveyPeriod");
         const surveyTitleEl = document.getElementById("surveyTitle");
         const surveySubtitleEl = document.getElementById("surveySubtitle");
         const unitOptionsEl = document.getElementById("unitOptions");
-        const sectionColorPickerEl = document.getElementById("sectionColorPicker");
-        const sectionColorChipsEl = document.getElementById("sectionColorChips");
+        const sectionTitleEl = document.getElementById("sectionTitle");
+        const sectionDescriptionEl = document.getElementById("sectionDescription");
+        const sectionColorEl = document.getElementById("sectionColor");
         const surveyEmailEl = document.getElementById("surveyEmail");
         const surveyEmailSubjectEl = document.getElementById("surveyEmailSubject");
         const surveyEmailMessageEl = document.getElementById("surveyEmailMessage");
         const surveyPdfFileNameEl = document.getElementById("surveyPdfFileName");
         const qTextEl = document.getElementById("qText");
         const qTypeEl = document.getElementById("qType");
-        const splitSurveyEl = document.getElementById("splitSurvey");
+        const qSectionIdEl = document.getElementById("qSectionId");
+        const splitSurveyEl = { checked: false };
         const splitSurveyWrapEl = document.getElementById("splitSurveyWrap");
         const hasChildWrapEl = document.getElementById("hasChildWrap");
         const hasChildEl = document.getElementById("hasChild");
@@ -670,34 +682,39 @@ Lep pozdrav
                 .filter(Boolean);
         }
 
-        function parseSectionColors(value) {
-            const parsed = String(value || "")
-                .split(";")
-                .map(x => x.trim())
-                .filter(Boolean);
-            return parsed.length ? parsed : ["#ffffff"];
+        function getDefaultSection() {
+            return { id: "sec_" + Date.now(), title: "Del 1", description: "", color: "#eef2ff" };
         }
 
-        function renderSectionColorChips() {
-            sectionColorChipsEl.innerHTML = "";
-            state.sectionColors.forEach((color, index) => {
-                const chip = document.createElement("button");
-                chip.type = "button";
-                chip.style.display = "inline-flex";
-                chip.style.alignItems = "center";
-                chip.style.gap = "8px";
-                chip.style.padding = "6px 10px";
-                chip.style.background = "#fff";
-                chip.innerHTML = `<span style="width:14px;height:14px;border-radius:4px;border:1px solid #cbd5e1;background:${escapeHtml(color)};"></span><span>${escapeHtml(color)}</span>✕`;
-                chip.addEventListener("click", () => {
-                    if (state.sectionColors.length === 1) return;
-                    state.sectionColors.splice(index, 1);
-                    renderSectionColorChips();
-                    renderSectionOverview();
-                    renderPreview();
-                });
-                sectionColorChipsEl.appendChild(chip);
-            });
+        function migrateLegacyConfig(data) {
+            const rawSections = Array.isArray(data.sections) ? data.sections : [];
+            if (rawSections.length > 0) {
+                return rawSections.map((section, index) => ({
+                    id: section.id || "sec_" + (index + 1),
+                    title: section.title || "Del " + (index + 1),
+                    description: section.description || "",
+                    color: section.color || "#eef2ff"
+                }));
+            }
+
+            const legacyColors = Array.isArray(data.sectionColors) ? data.sectionColors : ["#eef2ff"];
+            return [{ id: "sec_1", title: "Del 1", description: "", color: legacyColors[0] || "#eef2ff" }];
+        }
+
+        function getSectionById(sectionId) {
+            return state.sections.find(section => section.id === sectionId) || state.sections[0];
+        }
+
+        function renderQuestionSectionOptions(selectedId = "") {
+            if (!qSectionIdEl) return;
+            if (!state.sections.length) {
+                const section = getDefaultSection();
+                state.sections = [section];
+            }
+            qSectionIdEl.innerHTML = state.sections.map(section =>
+                `<option value="${escapeHtml(section.id)}">${escapeHtml(section.title)}</option>`
+            ).join("");
+            qSectionIdEl.value = selectedId || state.sections[0].id;
         }
 
         function questionAppliesToUnit(question, selectedUnit) {
@@ -758,6 +775,7 @@ Lep pozdrav
             document.getElementById("childImage").value = "";
             updateQuestionTypeUI();
             renderUnitCheckboxes([]);
+            renderQuestionSectionOptions();
         }
 
         function format(cmd) {
@@ -868,9 +886,14 @@ Lep pozdrav
                 text: text,
                 image: questionImageData || "",
                 units: getSelectedQuestionUnits(),
-                splitSurvey: qTypeEl.value === "text_block" ? splitSurveyEl.checked : false,
+                sectionId: qSectionIdEl.value || state.sections[0]?.id || "",
+                splitSurvey: false,
                 child: null
             };
+
+            if (!question.sectionId) {
+                throw new Error("Najprej dodaj del ankete in izberi del.");
+            }
 
             if (qTypeEl.value === "yesno" && hasChildEl.checked) {
                 const childType = childTypeEl.value;
@@ -978,6 +1001,7 @@ Lep pozdrav
             document.getElementById("childImage").value = "";
 
             renderUnitCheckboxes(q.units || []);
+            renderQuestionSectionOptions(q.sectionId);
 
             updateQuestionTypeUI();
 
@@ -1032,6 +1056,7 @@ Lep pozdrav
                         ${q.splitSurvey ? " | razdeli anketo" : ""}
                         ${q.child ? " | ima podvprašanje" : ""}
                     </div>
+                    <div class="hint">Del ankete: ${escapeHtml(getSectionById(q.sectionId)?.title || "—")}</div>
 
                     <div class="hint">
                         Enote: ${!q.units || q.units.length === 0
@@ -1062,36 +1087,108 @@ Lep pozdrav
         }
 
         function getSectionCount() {
-            let count = 1;
-            state.questions.forEach(q => {
-                if (q.type === "text_block" && q.splitSurvey) count += 1;
-            });
-            return count;
+            return state.sections.length || 1;
         }
 
         function ensureSectionColors() {
-            const sectionCount = getSectionCount();
-            while (state.sectionColors.length < sectionCount) {
-                state.sectionColors.push(state.sectionColors[state.sectionColors.length - 1] || "#eef2ff");
+            if (!state.sections.length) {
+                state.sections = [getDefaultSection()];
             }
         }
 
         function renderSectionOverview() {
             if (!sectionOverviewEl) return;
             ensureSectionColors();
-            const sectionCount = getSectionCount();
             sectionOverviewEl.innerHTML = "";
-            for (let i = 0; i < sectionCount; i += 1) {
+            state.sections.forEach((section, i) => {
                 const wrap = document.createElement("div");
                 wrap.className = "question-item";
                 wrap.innerHTML = `
                     <div class="question-head">
-                        <div><strong>Del ${i + 1}</strong></div>
-                        <input type="color" value="${escapeHtml(state.sectionColors[i] || "#eef2ff")}" data-section-color-index="${i}" style="width:46px; padding:2px;" />
+                        <div>
+                            <div><strong>${escapeHtml(section.title || ("Del " + (i + 1)))}</strong></div>
+                            <div class="hint preserve-wrap">${escapeHtml(section.description || "")}</div>
+                        </div>
+                        <div class="mini-actions">
+                            <input type="color" value="${escapeHtml(section.color || "#eef2ff")}" data-section-color-index="${i}" style="width:46px; padding:2px;" />
+                            <button type="button" onclick="moveSection(${i}, -1)">↑</button>
+                            <button type="button" onclick="moveSection(${i}, 1)">↓</button>
+                            <button type="button" onclick="editSection(${i})">Uredi</button>
+                            <button type="button" onclick="deleteSection(${i})">Izbriši</button>
+                        </div>
                     </div>
                 `;
                 sectionOverviewEl.appendChild(wrap);
+            });
+        }
+
+        function resetSectionForm() {
+            editSectionIndex = -1;
+            sectionTitleEl.value = "";
+            sectionDescriptionEl.value = "";
+            sectionColorEl.value = "#eef2ff";
+            document.getElementById("saveSectionBtn").textContent = "Dodaj del";
+        }
+
+        function saveSection() {
+            const title = sectionTitleEl.value.trim() || `Del ${state.sections.length + 1}`;
+            const description = sectionDescriptionEl.value.trim();
+            const color = sectionColorEl.value || "#eef2ff";
+
+            if (editSectionIndex >= 0) {
+                const target = state.sections[editSectionIndex];
+                target.title = title;
+                target.description = description;
+                target.color = color;
+            } else {
+                state.sections.push({
+                    id: "sec_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                    title,
+                    description,
+                    color
+                });
             }
+
+            resetSectionForm();
+            renderQuestionSectionOptions();
+            renderAll();
+        }
+
+        function editSection(index) {
+            const section = state.sections[index];
+            if (!section) return;
+            editSectionIndex = index;
+            sectionTitleEl.value = section.title || "";
+            sectionDescriptionEl.value = section.description || "";
+            sectionColorEl.value = section.color || "#eef2ff";
+            document.getElementById("saveSectionBtn").textContent = "Shrani del";
+        }
+
+        function moveSection(index, direction) {
+            const target = index + direction;
+            if (target < 0 || target >= state.sections.length) return;
+            const tmp = state.sections[index];
+            state.sections[index] = state.sections[target];
+            state.sections[target] = tmp;
+            renderQuestionSectionOptions(qSectionIdEl.value);
+            renderAll();
+        }
+
+        function deleteSection(index) {
+            if (state.sections.length <= 1) {
+                setStatus("Anketa mora imeti vsaj en del.");
+                return;
+            }
+            const section = state.sections[index];
+            const inUse = state.questions.some(q => q.sectionId === section.id);
+            if (inUse) {
+                setStatus("Dela ni mogoče izbrisati, ker vsebuje vprašanja.");
+                return;
+            }
+            state.sections.splice(index, 1);
+            resetSectionForm();
+            renderQuestionSectionOptions();
+            renderAll();
         }
 
         function renderPreview() {
@@ -1139,32 +1236,26 @@ Lep pozdrav
             }
 
             let previewQuestionNumber = 0;
-            let previewSection = 1;
             ensureSectionColors();
-            const previewColors = state.sectionColors?.length ? state.sectionColors : ["#ffffff", "#eef2ff"];
-
-            state.questions.forEach((q, index) => {
-                if (q.type === "text_block" && q.splitSurvey) {
-                    html += `
-                        <div class="survey-card" style="border-style:dashed;">
-                            <div class="top-chip">Konec dela ${previewSection}</div>
-                            <div class="btns" style="margin-top:8px;">
-                                <button type="button">Natisni / Shrani v PDF (del ${previewSection})</button>
-                                <button type="button">Shrani PDF in pošlji (del ${previewSection})</button>
-                                <button type="button">Shrani osnutek (del ${previewSection})</button>
-                                <button type="button">Uvozi osnutek (del ${previewSection})</button>
-                            </div>
-                        </div>
-                    `;
-                    previewSection += 1;
-                }
-                const showQuestionNumber = q.type !== "text_block";
-                if (showQuestionNumber) {
-                    previewQuestionNumber += 1;
-                }
-
+            state.sections.forEach((section, sectionIndex) => {
                 html += `
-            <div class="survey-card" style="background:${previewColors[(previewSection - 1) % previewColors.length]};">
+                    <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")}; border-left:5px solid rgba(0,0,0,0.15);">
+                        <div class="top-chip">Del ${sectionIndex + 1}</div>
+                        <div class="survey-title">${escapeHtml(applyAdminPlaceholders(section.title || `Del ${sectionIndex + 1}`))}</div>
+                        ${section.description ? `<div class="preserve-wrap muted">${escapeHtml(applyAdminPlaceholders(section.description))}</div>` : ""}
+                    </div>
+                `;
+
+                state.questions
+                    .filter(q => (q.sectionId || state.sections[0]?.id) === section.id)
+                    .forEach((q, index) => {
+                        const showQuestionNumber = q.type !== "text_block";
+                        if (showQuestionNumber) {
+                            previewQuestionNumber += 1;
+                        }
+
+                        html += `
+            <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")};">
                 <div class="survey-title">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
@@ -1181,8 +1272,8 @@ Lep pozdrav
 
                 ${q.type === "yesno" ? `
                     <div class="yesno">
-                        <label><input type="radio" name="preview_q_${index}" /> DA</label>
-                        <label><input type="radio" name="preview_q_${index}" /> NE</label>
+                        <label><input type="radio" name="preview_q_${section.id}_${index}" /> DA</label>
+                        <label><input type="radio" name="preview_q_${section.id}_${index}" /> NE</label>
                     </div>
                 ` : q.type === "text_block" ? `
                 ` : `
@@ -1216,6 +1307,18 @@ Lep pozdrav
                 ` : ""}
             </div>
         `;
+                    });
+
+                html += `
+                    <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")}; border-style:dashed;">
+                        <div class="btns">
+                            <button type="button">Natisni / Shrani v PDF (del ${sectionIndex + 1})</button>
+                            <button type="button">Shrani PDF in pošlji (del ${sectionIndex + 1})</button>
+                            <button type="button">Shrani osnutek (del ${sectionIndex + 1})</button>
+                            <button type="button">Uvozi osnutek (del ${sectionIndex + 1})</button>
+                        </div>
+                    </div>
+                `;
             });
 
             previewContainerEl.innerHTML = html;
@@ -1223,6 +1326,7 @@ Lep pozdrav
 
         function renderAll() {
             renderTopbarLogo();
+            renderQuestionSectionOptions(qSectionIdEl.value);
             renderQuestionList();
             renderSectionOverview();
             renderPreview();
@@ -1282,9 +1386,7 @@ Lep pozdrav
                     state.surveyTitle = data.surveyTitle || "Vprašalnik {obdobje}";
                     state.surveySubtitle = data.surveySubtitle || "";
                     state.units = Array.isArray(data.units) ? data.units : [];
-                    state.sectionColors = Array.isArray(data.sectionColors)
-                        ? parseSectionColors(data.sectionColors.join(";"))
-                        : parseSectionColors("");
+                    state.sections = migrateLegacyConfig(data);
                     state.emailRecipient = data.emailRecipient || "";
                     state.emailSubject = data.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
                     state.emailMessage = data.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -1298,13 +1400,15 @@ Lep pozdrav
                     surveyTitleEl.value = state.surveyTitle;
                     surveySubtitleEl.value = state.surveySubtitle;
                     unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
-                    renderSectionColorChips();
+                    renderSectionOverview();
                     surveyEmailEl.value = state.emailRecipient || "";
                     surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
                     surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
                     surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik {obdobje} - {enota}";
 
+                    renderQuestionSectionOptions();
                     resetQuestionForm();
+                    resetSectionForm();
                     renderAll();
                     setStatus("JSON konfiguracija uvožena.");
                 } catch {
@@ -1336,6 +1440,7 @@ Lep pozdrav
             return {
                 ...question,
                 units: Array.isArray(question.units) ? question.units : [],
+                sectionId: question.sectionId || "",
                 splitSurvey: !!question.splitSurvey,
                 child: normalizeChild(question.child)
             };
@@ -1997,20 +2102,25 @@ Lep pozdrav
             const selectedUnit = unitSelect.value;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
-            let sectionIndex = 1;
-            const sectionColors = Array.isArray(CONFIG.sectionColors) && CONFIG.sectionColors.length
-                ? CONFIG.sectionColors
-                : ["#ffffff", "#eef2ff"];
+            const sections = Array.isArray(CONFIG.sections) && CONFIG.sections.length
+                ? CONFIG.sections
+                : [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }];
             container.innerHTML = "";
 
             const visibleQuestions = (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+            let questionIndex = -1;
 
-            visibleQuestions.forEach((q, questionIndex) => {
-                if (!questionAppliesToUnit(q, selectedUnit)) return;
-                if (q.type === "text_block" && q.splitSurvey) {
-                    renderSectionActions(container, sectionIndex);
-                    sectionIndex += 1;
-                }
+            sections.forEach((section, sectionIndex) => {
+                const sectionNumber = sectionIndex + 1;
+                const sectionTitle = document.createElement("div");
+                sectionTitle.className = "card";
+                sectionTitle.dataset.section = String(sectionNumber);
+                sectionTitle.style.background = section.color || "#eef2ff";
+                sectionTitle.innerHTML = '<div class="top-chip">Del ' + sectionNumber + '</div><div class="question-title">' + applyRuntimePlaceholders(section.title || ('Del ' + sectionNumber)) + '</div>' + (section.description ? '<div class="preserve-wrap muted">' + applyRuntimePlaceholders(section.description) + '</div>' : '');
+                container.appendChild(sectionTitle);
+
+                visibleQuestions.filter(q => (q.sectionId || sections[0].id) === section.id).forEach((q) => {
+                questionIndex += 1;
 
                 const showQuestionNumber = q.type !== "text_block";
                 if (showQuestionNumber) {
@@ -2019,9 +2129,9 @@ Lep pozdrav
 
                 const card = document.createElement("div");
                 card.className = "card";
-                card.dataset.section = String(sectionIndex);
+                card.dataset.section = String(sectionNumber);
                 card.dataset.questionIndex = String(questionIndex);
-                card.style.background = sectionColors[(sectionIndex - 1) % sectionColors.length];
+                card.style.background = section.color || "#eef2ff";
 
                 const title = document.createElement("div");
                 title.className = "question-title";
@@ -2146,6 +2256,9 @@ Lep pozdrav
                 }
 
                 container.appendChild(card);
+                });
+
+                renderSectionActions(container, sectionNumber);
             });
 
             renderSectionActions(container, sectionIndex);
@@ -2262,21 +2375,16 @@ Lep pozdrav
             renderUnitCheckboxes(selected);
             renderPreview();
         });
-        on(document.getElementById("addSectionColorBtn"), "click", () => {
-            const nextColor = sectionColorPickerEl.value || "#eef2ff";
-            state.sectionColors.push(nextColor);
-            renderSectionColorChips();
-            renderSectionOverview();
-            renderPreview();
-        });
+        on(document.getElementById("saveSectionBtn"), "click", saveSection);
+        on(document.getElementById("resetSectionBtn"), "click", resetSectionForm);
 
         on(document, "input", (event) => {
             const colorInput = event.target.closest("[data-section-color-index]");
             if (!colorInput) return;
             const index = Number(colorInput.getAttribute("data-section-color-index"));
             if (Number.isNaN(index)) return;
-            state.sectionColors[index] = colorInput.value || state.sectionColors[index] || "#eef2ff";
-            renderSectionColorChips();
+            if (!state.sections[index]) return;
+            state.sections[index].color = colorInput.value || state.sections[index].color || "#eef2ff";
             renderPreview();
         });
 
@@ -2302,9 +2410,10 @@ Lep pozdrav
         try {
             state.questions = state.questions.map(normalizeQuestion);
             state.units = Array.isArray(state.units) && state.units.length ? state.units : [...DEFAULT_UNITS];
-            state.sectionColors = Array.isArray(state.sectionColors) && state.sectionColors.length
-                ? state.sectionColors
-                : ["#ffffff", "#eef2ff"];
+            state.sections = Array.isArray(state.sections) && state.sections.length
+                ? state.sections
+                : [getDefaultSection()];
+            state.questions = state.questions.map(q => ({ ...q, sectionId: q.sectionId || state.sections[0].id }));
 
             surveyPeriodEl.value = state.surveyPeriod || "";
             surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
@@ -2317,7 +2426,8 @@ Lep pozdrav
 
             renderAll();
             renderUnitCheckboxes([]);
-            renderSectionColorChips();
+            renderQuestionSectionOptions();
+            resetSectionForm();
             updateQuestionTypeUI();
         } catch (initError) {
             console.error("Napaka pri inicializaciji admin vmesnika:", initError);
@@ -2327,6 +2437,9 @@ Lep pozdrav
         window.editQuestion = editQuestion;
         window.deleteQuestion = deleteQuestion;
         window.moveQuestion = moveQuestion;
+        window.editSection = editSection;
+        window.deleteSection = deleteSection;
+        window.moveSection = moveSection;
 
         function fileToDataUrl(file) {
             return new Promise((resolve, reject) => {
