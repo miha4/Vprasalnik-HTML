@@ -416,9 +416,13 @@
                     <input id="unitOptions" type="text" value="OKZP;FIS;FDT;BRN;MBX;POW;CEK" />
                     <div class="hint">Primer: OKZP; FIS; FDT</div>
 
-                    <label for="sectionColorPalette">Barve oblačkov po delih (ločene s podpičjem)</label>
-                    <input id="sectionColorPalette" type="text" value="#ffffff;#eef2ff;#f0fdf4;#fff7ed" />
-                    <div class="hint">Primer: #ffffff; #eef2ff; #f0fdf4. Če je delov več, se barve ciklično ponavljajo.</div>
+                    <label>Barve oblačkov po delih</label>
+                    <div class="btns" style="margin-top:0;">
+                        <input id="sectionColorPicker" type="color" value="#eef2ff" style="width:52px; padding:4px;" />
+                        <button id="addSectionColorBtn" type="button">+ Dodaj barvo</button>
+                    </div>
+                    <div id="sectionColorChips" class="units-box" style="margin-top:8px;"></div>
+                    <div class="hint">Barve dodaj z gumbom. Za več delov se barve samodejno ciklično ponavljajo.</div>
 
                     <label for="surveyLogo">Logotip ankete (neobvezno)</label>
                     <input id="surveyLogo" type="file" accept="image/*" />
@@ -577,7 +581,8 @@ Lep pozdrav
         const surveyTitleEl = document.getElementById("surveyTitle");
         const surveySubtitleEl = document.getElementById("surveySubtitle");
         const unitOptionsEl = document.getElementById("unitOptions");
-        const sectionColorPaletteEl = document.getElementById("sectionColorPalette");
+        const sectionColorPickerEl = document.getElementById("sectionColorPicker");
+        const sectionColorChipsEl = document.getElementById("sectionColorChips");
         const surveyEmailEl = document.getElementById("surveyEmail");
         const surveyEmailSubjectEl = document.getElementById("surveyEmailSubject");
         const surveyEmailMessageEl = document.getElementById("surveyEmailMessage");
@@ -650,12 +655,40 @@ Lep pozdrav
                 .filter(Boolean);
         }
 
+        function parseUnits(value) {
+            return String(value || "")
+                .split(/[\n,;]+/)
+                .map(x => x.trim())
+                .filter(Boolean);
+        }
+
         function parseSectionColors(value) {
             const parsed = String(value || "")
                 .split(";")
                 .map(x => x.trim())
                 .filter(Boolean);
             return parsed.length ? parsed : ["#ffffff"];
+        }
+
+        function renderSectionColorChips() {
+            sectionColorChipsEl.innerHTML = "";
+            state.sectionColors.forEach((color, index) => {
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.style.display = "inline-flex";
+                chip.style.alignItems = "center";
+                chip.style.gap = "8px";
+                chip.style.padding = "6px 10px";
+                chip.style.background = "#fff";
+                chip.innerHTML = `<span style="width:14px;height:14px;border-radius:4px;border:1px solid #cbd5e1;background:${escapeHtml(color)};"></span><span>${escapeHtml(color)}</span>✕`;
+                chip.addEventListener("click", () => {
+                    if (state.sectionColors.length === 1) return;
+                    state.sectionColors.splice(index, 1);
+                    renderSectionColorChips();
+                    renderPreview();
+                });
+                sectionColorChipsEl.appendChild(chip);
+            });
         }
 
         function questionAppliesToUnit(question, selectedUnit) {
@@ -693,12 +726,8 @@ Lep pozdrav
             state.surveyPeriod = surveyPeriodEl.value.trim() || "";
             state.surveyTitle = surveyTitleEl.value.trim() || "Vprašalnik {obdobje}";
             state.surveySubtitle = surveySubtitleEl.value.trim() || "";
-            const parsedUnits = unitOptionsEl.value
-                .split(";")
-                .map(x => x.trim())
-                .filter(Boolean);
+            const parsedUnits = parseUnits(unitOptionsEl.value);
             state.units = parsedUnits.length ? parsedUnits : [...DEFAULT_UNITS];
-            state.sectionColors = parseSectionColors(sectionColorPaletteEl.value);
             state.emailRecipient = surveyEmailEl.value.trim();
             state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjen vprašalnik {obdobje} - {enota}";
             state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -1225,7 +1254,7 @@ Lep pozdrav
                     surveyTitleEl.value = state.surveyTitle;
                     surveySubtitleEl.value = state.surveySubtitle;
                     unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
-                    sectionColorPaletteEl.value = (state.sectionColors || []).join(";");
+                    renderSectionColorChips();
                     surveyEmailEl.value = state.emailRecipient || "";
                     surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
                     surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -2169,6 +2198,7 @@ Lep pozdrav
         }
 
         hasChildEl.addEventListener("change", updateQuestionTypeUI);
+        hasChildEl.addEventListener("input", updateQuestionTypeUI);
         qTypeEl.addEventListener("change", updateQuestionTypeUI);
 
         surveyPeriodEl.addEventListener("input", renderPreview);
@@ -2182,6 +2212,12 @@ Lep pozdrav
         unitOptionsEl.addEventListener("input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
+            renderPreview();
+        });
+        document.getElementById("addSectionColorBtn").addEventListener("click", () => {
+            const nextColor = sectionColorPickerEl.value || "#eef2ff";
+            state.sectionColors.push(nextColor);
+            renderSectionColorChips();
             renderPreview();
         });
 
@@ -2209,7 +2245,6 @@ Lep pozdrav
         surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
         surveySubtitleEl.value = state.surveySubtitle || "";
         unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
-        sectionColorPaletteEl.value = (state.sectionColors && state.sectionColors.length ? state.sectionColors : ["#ffffff", "#eef2ff"]).join(";");
         surveyEmailEl.value = state.emailRecipient || "";
         surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
         surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -2217,6 +2252,7 @@ Lep pozdrav
 
         renderAll();
         renderUnitCheckboxes([]);
+        renderSectionColorChips();
         updateQuestionTypeUI();
 
         window.editQuestion = editQuestion;
