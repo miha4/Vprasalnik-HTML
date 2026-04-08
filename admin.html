@@ -1739,6 +1739,11 @@ Lep pozdrav
             display: inline-block;
         }
 
+        .card.no-print {
+            display: block;
+            width: 100%;
+        }
+
         .section-shell {
             margin-bottom: 16px;
             border-radius: var(--radius);
@@ -1888,7 +1893,7 @@ Lep pozdrav
         <div id="surveyContainer"></div>
 
         <div class="card no-print">
-            <div class="btns">
+            <div class="btns main-actions">
                 <button type="button" id="printPdfBtn">Natisni / Shrani v PDF</button>
                 <button type="button" id="printAndMailBtn">Shrani PDF in pošlji</button>
                 <button type="button" id="saveDraftBtn">Shrani osnutek</button>
