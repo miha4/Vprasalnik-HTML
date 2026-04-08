@@ -2239,20 +2239,30 @@ Lep pozdrav
             e.target.value = "";
         });
 
-        state.questions = state.questions.map(normalizeQuestion);
-        surveyPeriodEl.value = state.surveyPeriod || "";
-        surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
-        surveySubtitleEl.value = state.surveySubtitle || "";
-        unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
-        surveyEmailEl.value = state.emailRecipient || "";
-        surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
-        surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
-        surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik {obdobje} - {enota}";
+        try {
+            state.questions = state.questions.map(normalizeQuestion);
+            state.units = Array.isArray(state.units) && state.units.length ? state.units : [...DEFAULT_UNITS];
+            state.sectionColors = Array.isArray(state.sectionColors) && state.sectionColors.length
+                ? state.sectionColors
+                : ["#ffffff", "#eef2ff"];
 
-        renderAll();
-        renderUnitCheckboxes([]);
-        renderSectionColorChips();
-        updateQuestionTypeUI();
+            surveyPeriodEl.value = state.surveyPeriod || "";
+            surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
+            surveySubtitleEl.value = state.surveySubtitle || "";
+            unitOptionsEl.value = state.units.join(";");
+            surveyEmailEl.value = state.emailRecipient || "";
+            surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
+            surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
+            surveyPdfFileNameEl.value = state.pdfFileName || "Vprašalnik {obdobje} - {enota}";
+
+            renderAll();
+            renderUnitCheckboxes([]);
+            renderSectionColorChips();
+            updateQuestionTypeUI();
+        } catch (initError) {
+            console.error("Napaka pri inicializaciji admin vmesnika:", initError);
+            setStatus("Napaka pri inicializaciji: " + (initError?.message || initError));
+        }
 
         window.editQuestion = editQuestion;
         window.deleteQuestion = deleteQuestion;
