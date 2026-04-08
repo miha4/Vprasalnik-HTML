@@ -1926,15 +1926,14 @@ Lep pozdrav
         function renderSectionActions(container, sectionIndex) {
             const card = document.createElement("div");
             card.className = "card no-print section-actions";
-            card.innerHTML = `
-                <div><strong>Akcije za del ${sectionIndex}</strong></div>
-                <div class="btns">
-                    <button type="button" data-section-action="print" data-section="${sectionIndex}">Natisni / Shrani v PDF (del ${sectionIndex})</button>
-                    <button type="button" data-section-action="mail" data-section="${sectionIndex}">Shrani PDF in pošlji (del ${sectionIndex})</button>
-                    <button type="button" data-section-action="save" data-section="${sectionIndex}">Shrani osnutek (del ${sectionIndex})</button>
-                    <button type="button" data-section-action="load" data-section="${sectionIndex}">Uvozi osnutek (del ${sectionIndex})</button>
-                </div>
-            `;
+            card.innerHTML =
+                '<div><strong>Akcije za del ' + sectionIndex + '</strong></div>' +
+                '<div class="btns">' +
+                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF (del ' + sectionIndex + ')</button>' +
+                    '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji (del ' + sectionIndex + ')</button>' +
+                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani osnutek (del ' + sectionIndex + ')</button>' +
+                    '<button type="button" data-section-action="load" data-section="' + sectionIndex + '">Uvozi osnutek (del ' + sectionIndex + ')</button>' +
+                '</div>';
             container.appendChild(card);
         }
 
