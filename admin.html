@@ -416,6 +416,14 @@
                     <input id="unitOptions" type="text" value="OKZP;FIS;FDT;BRN;MBX;POW;CEK" />
                     <div class="hint">Primer: OKZP; FIS; FDT</div>
 
+                    <label>Barve oblačkov po delih</label>
+                    <div class="btns" style="margin-top:0;">
+                        <input id="sectionColorPicker" type="color" value="#eef2ff" style="width:52px; padding:4px;" />
+                        <button id="addSectionColorBtn" type="button">+ Dodaj barvo</button>
+                    </div>
+                    <div id="sectionColorChips" class="units-box" style="margin-top:8px;"></div>
+                    <div class="hint">Barve dodaj z gumbom. Za več delov se barve samodejno ciklično ponavljajo.</div>
+
                     <label for="surveyLogo">Logotip ankete (neobvezno)</label>
                     <input id="surveyLogo" type="file" accept="image/*" />
                     <div class="hint">Logotip se bo vgradil v končni Vprašalnik.html.</div>
@@ -1045,6 +1053,7 @@ Lep pozdrav
                                     : "Tekstovni odgovor"
                         )}
                         ${q.image ? " | ima sliko" : ""}
+                        ${q.splitSurvey ? " | razdeli anketo" : ""}
                         ${q.child ? " | ima podvprašanje" : ""}
                     </div>
                     <div class="hint">Del ankete: ${escapeHtml(getSectionById(q.sectionId)?.title || "—")}</div>
@@ -2257,6 +2266,8 @@ Lep pozdrav
                 sectionTitle.appendChild(renderSectionActions(sectionNumber));
                 container.appendChild(sectionTitle);
             });
+
+            renderSectionActions(container, sectionIndex);
         }
 
         document.getElementById("surveyUnit").addEventListener("change", () => {
