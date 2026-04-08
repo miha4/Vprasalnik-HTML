@@ -266,6 +266,38 @@
             margin-bottom: 16px;
         }
 
+        .section-shell {
+            margin-bottom: 16px;
+            border-radius: 14px;
+            padding: 14px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+        }
+
+        .section-header-card,
+        .section-actions-card {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .section-questions {
+            display: grid;
+            gap: 12px;
+            margin: 12px 0;
+        }
+
+        .section-question-card {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .section-actions-card .btns button {
+            flex: 1 1 220px;
+        }
+
         .survey-title {
             font-size: 18px;
             font-weight: 700;
@@ -1238,11 +1270,13 @@ Lep pozdrav
             let previewQuestionNumber = 0;
             ensureSectionColors();
             state.sections.forEach((section, sectionIndex) => {
+                html += `<div class="section-shell" style="background:${escapeHtml(section.color || "#eef2ff")};">`;
                 html += `
-                    <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")}; border-left:5px solid rgba(0,0,0,0.15);">
+                    <div class="section-header-card">
                         <div class="survey-title">${escapeHtml(applyAdminPlaceholders(section.title || `Del ${sectionIndex + 1}`))}</div>
                         ${section.description ? `<div class="preserve-wrap muted">${escapeHtml(applyAdminPlaceholders(section.description))}</div>` : ""}
                     </div>
+                    <div class="section-questions">
                 `;
 
                 state.questions
@@ -1254,7 +1288,7 @@ Lep pozdrav
                         }
 
                         html += `
-            <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")};">
+            <div class="section-question-card">
                 <div class="survey-title">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
@@ -1308,8 +1342,8 @@ Lep pozdrav
         `;
                     });
 
-                html += `
-                    <div class="survey-card" style="background:${escapeHtml(section.color || "#eef2ff")}; border-style:dashed;">
+                html += `</div>
+                    <div class="section-actions-card">
                         <div class="btns">
                             <button type="button">Natisni / Shrani v PDF</button>
                             <button type="button">Shrani PDF in pošlji</button>
@@ -1317,7 +1351,7 @@ Lep pozdrav
                             <button type="button">Uvozi osnutek</button>
                         </div>
                     </div>
-                `;
+                </div>`;
             });
 
             previewContainerEl.innerHTML = html;
@@ -1672,15 +1706,36 @@ Lep pozdrav
             display: inline-block;
         }
 
-        .section-actions {
-            border-style: dashed;
-        }
-
-        .section-group {
+        .section-shell {
             margin-bottom: 16px;
+            border-radius: var(--radius);
+            padding: 14px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            break-inside: avoid;
         }
 
-        .section-group .section-actions .btns button {
+        .section-header-card,
+        .section-actions-card {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 12px;
+            padding: 12px;
+        }
+
+        .section-questions {
+            display: grid;
+            gap: 12px;
+            margin: 12px 0;
+        }
+
+        .section-question-card {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .section-actions-card .btns button {
             flex: 1 1 220px;
         }
 
@@ -1851,7 +1906,7 @@ Lep pozdrav
         }
 
         function collectDraft(sectionIndex = null) {
-            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card[data-question-index]"))
+            const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"))
                 .filter(card => sectionIndex == null || Number(card.dataset.section) === Number(sectionIndex));
 
             return {
@@ -1940,7 +1995,7 @@ Lep pozdrav
             document.getElementById("surveyUnit").value = selectedUnit;
             renderSurvey();
 
-            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card[data-question-index]"));
+            const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
 
             (draft.answers || []).forEach((answer) => {
                 const card = cards.find(c => Number(c.dataset.questionIndex) === Number(answer.questionIndex));
@@ -2072,7 +2127,7 @@ Lep pozdrav
         function printSection(sectionIndex) {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
-            const hiddenCards = Array.from(document.querySelectorAll("#surveyContainer > .card[data-section]"))
+            const hiddenCards = Array.from(document.querySelectorAll("#surveyContainer > .section-shell[data-section]"))
                 .filter(card => Number(card.dataset.section) !== Number(sectionIndex));
             hiddenCards.forEach(card => card.classList.add("print-hidden-temp"));
             window.print();
@@ -2081,7 +2136,7 @@ Lep pozdrav
 
         function renderSectionActions(sectionIndex) {
             const card = document.createElement("div");
-            card.className = "card no-print section-actions";
+            card.className = "section-actions-card no-print";
             card.innerHTML =
                 '<div class="btns">' +
                     '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
@@ -2118,11 +2173,18 @@ Lep pozdrav
 
             sections.forEach((section, sectionIndex) => {
                 const sectionNumber = sectionIndex + 1;
-                const sectionTitle = document.createElement("div");
-                sectionTitle.className = "card section-group";
-                sectionTitle.dataset.section = String(sectionNumber);
-                sectionTitle.style.background = section.color || "#eef2ff";
-                sectionTitle.innerHTML = '<div class="question-title">' + applyRuntimePlaceholders(section.title || ('Del ' + sectionNumber)) + '</div>' + (section.description ? '<div class="preserve-wrap muted">' + applyRuntimePlaceholders(section.description) + '</div>' : '');
+                const sectionShell = document.createElement("div");
+                sectionShell.className = "section-shell";
+                sectionShell.dataset.section = String(sectionNumber);
+                sectionShell.style.background = section.color || "#eef2ff";
+
+                const sectionHeader = document.createElement("div");
+                sectionHeader.className = "section-header-card";
+                sectionHeader.innerHTML = '<div class="question-title">' + applyRuntimePlaceholders(section.title || ('Del ' + sectionNumber)) + '</div>' + (section.description ? '<div class="preserve-wrap muted">' + applyRuntimePlaceholders(section.description) + '</div>' : '');
+                sectionShell.appendChild(sectionHeader);
+
+                const questionsWrap = document.createElement("div");
+                questionsWrap.className = "section-questions";
 
                 visibleQuestions.filter(q => (q.sectionId || sections[0].id) === section.id).forEach((q) => {
                 questionIndex += 1;
@@ -2133,10 +2195,9 @@ Lep pozdrav
                 }
 
                 const card = document.createElement("div");
-                card.className = "card";
+                card.className = "section-question-card";
                 card.dataset.section = String(sectionNumber);
                 card.dataset.questionIndex = String(questionIndex);
-                card.style.background = section.color || "#eef2ff";
 
                 const title = document.createElement("div");
                 title.className = "question-title";
@@ -2260,14 +2321,13 @@ Lep pozdrav
                     card.appendChild(hint);
                 }
 
-                sectionTitle.appendChild(card);
+                questionsWrap.appendChild(card);
                 });
 
-                sectionTitle.appendChild(renderSectionActions(sectionNumber));
-                container.appendChild(sectionTitle);
+                sectionShell.appendChild(questionsWrap);
+                sectionShell.appendChild(renderSectionActions(sectionNumber));
+                container.appendChild(sectionShell);
             });
-
-            renderSectionActions(container, sectionIndex);
         }
 
         document.getElementById("surveyUnit").addEventListener("change", () => {
