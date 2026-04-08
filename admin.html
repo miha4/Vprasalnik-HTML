@@ -416,6 +416,14 @@
                     <input id="unitOptions" type="text" value="OKZP;FIS;FDT;BRN;MBX;POW;CEK" />
                     <div class="hint">Primer: OKZP; FIS; FDT</div>
 
+                    <label>Barve oblačkov po delih</label>
+                    <div class="btns" style="margin-top:0;">
+                        <input id="sectionColorPicker" type="color" value="#eef2ff" style="width:52px; padding:4px;" />
+                        <button id="addSectionColorBtn" type="button">+ Dodaj barvo</button>
+                    </div>
+                    <div id="sectionColorChips" class="units-box" style="margin-top:8px;"></div>
+                    <div class="hint">Barve dodaj z gumbom. Za več delov se barve samodejno ciklično ponavljajo.</div>
+
                     <label for="surveyLogo">Logotip ankete (neobvezno)</label>
                     <input id="surveyLogo" type="file" accept="image/*" />
                     <div class="hint">Logotip se bo vgradil v končni Vprašalnik.html.</div>
@@ -471,10 +479,14 @@ Lep pozdrav
 
                     <label for="questionImage">Slika vprašanja (neobvezno)</label>
                     <input id="questionImage" type="file" accept="image/*" />
+                    <div id="splitSurveyWrap" class="checkbox-row hidden">
+                        <input id="splitSurvey" type="checkbox" />
+                        <label for="splitSurvey" style="margin:0; font-weight:700;">Razdeli anketo na tem mestu</label>
+                    </div>
 
                     <div class="hint">Slika se bo vgradila v končni Vprašalnik.html, zato uporabnik dobi samo eno datoteko.</div>
 
-                    <div class="checkbox-row">
+                    <div id="hasChildWrap" class="checkbox-row">
                         <input id="hasChild" type="checkbox" />
                         <label for="hasChild" style="margin:0; font-weight:700;">Ob odgovoru DA pokaži podvprašanje</label>
                     </div>
@@ -546,6 +558,8 @@ Lep pozdrav
     </div>
 
     <script>
+        const DEFAULT_UNITS = ["OKZP", "FIS", "FDT", "BRN", "MBX", "POW", "CEK"];
+
         const state = {
             surveyPeriod: "2026C",
             surveyTitle: "Vprašalnik {obdobje}",
@@ -555,7 +569,8 @@ Lep pozdrav
             emailMessage: "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}",
             pdfFileName: "Vprašalnik {obdobje} - {enota}",
             logo: "",
-            units: ["OKZP", "FIS", "FDT", "BRN", "MBX", "POW", "CEK"],
+            units: [...DEFAULT_UNITS],
+            sectionColors: ["#ffffff", "#eef2ff", "#f0fdf4", "#fff7ed"],
             questions: []
         };
 
@@ -566,12 +581,17 @@ Lep pozdrav
         const surveyTitleEl = document.getElementById("surveyTitle");
         const surveySubtitleEl = document.getElementById("surveySubtitle");
         const unitOptionsEl = document.getElementById("unitOptions");
+        const sectionColorPickerEl = document.getElementById("sectionColorPicker");
+        const sectionColorChipsEl = document.getElementById("sectionColorChips");
         const surveyEmailEl = document.getElementById("surveyEmail");
         const surveyEmailSubjectEl = document.getElementById("surveyEmailSubject");
         const surveyEmailMessageEl = document.getElementById("surveyEmailMessage");
         const surveyPdfFileNameEl = document.getElementById("surveyPdfFileName");
         const qTextEl = document.getElementById("qText");
         const qTypeEl = document.getElementById("qType");
+        const splitSurveyEl = document.getElementById("splitSurvey");
+        const splitSurveyWrapEl = document.getElementById("splitSurveyWrap");
+        const hasChildWrapEl = document.getElementById("hasChildWrap");
         const hasChildEl = document.getElementById("hasChild");
         const childFieldsEl = document.getElementById("childFields");
         const childTypeEl = document.getElementById("childType");
@@ -635,6 +655,42 @@ Lep pozdrav
                 .filter(Boolean);
         }
 
+        function parseUnits(value) {
+            return String(value || "")
+                .split(/[\n,;]+/)
+                .map(x => x.trim())
+                .filter(Boolean);
+        }
+
+        function parseSectionColors(value) {
+            const parsed = String(value || "")
+                .split(";")
+                .map(x => x.trim())
+                .filter(Boolean);
+            return parsed.length ? parsed : ["#ffffff"];
+        }
+
+        function renderSectionColorChips() {
+            sectionColorChipsEl.innerHTML = "";
+            state.sectionColors.forEach((color, index) => {
+                const chip = document.createElement("button");
+                chip.type = "button";
+                chip.style.display = "inline-flex";
+                chip.style.alignItems = "center";
+                chip.style.gap = "8px";
+                chip.style.padding = "6px 10px";
+                chip.style.background = "#fff";
+                chip.innerHTML = `<span style="width:14px;height:14px;border-radius:4px;border:1px solid #cbd5e1;background:${escapeHtml(color)};"></span><span>${escapeHtml(color)}</span>✕`;
+                chip.addEventListener("click", () => {
+                    if (state.sectionColors.length === 1) return;
+                    state.sectionColors.splice(index, 1);
+                    renderSectionColorChips();
+                    renderPreview();
+                });
+                sectionColorChipsEl.appendChild(chip);
+            });
+        }
+
         function questionAppliesToUnit(question, selectedUnit) {
             if (!question.units || question.units.length === 0) return true;
             if (!selectedUnit) return true;
@@ -670,10 +726,8 @@ Lep pozdrav
             state.surveyPeriod = surveyPeriodEl.value.trim() || "";
             state.surveyTitle = surveyTitleEl.value.trim() || "Vprašalnik {obdobje}";
             state.surveySubtitle = surveySubtitleEl.value.trim() || "";
-            state.units = unitOptionsEl.value
-                .split(";")
-                .map(x => x.trim())
-                .filter(Boolean);
+            const parsedUnits = parseUnits(unitOptionsEl.value);
+            state.units = parsedUnits.length ? parsedUnits : [...DEFAULT_UNITS];
             state.emailRecipient = surveyEmailEl.value.trim();
             state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjen vprašalnik {obdobje} - {enota}";
             state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -685,6 +739,7 @@ Lep pozdrav
             qTextEl.innerHTML = "";
             qTypeEl.value = "yesno";
             hasChildEl.checked = false;
+            splitSurveyEl.checked = false;
             childTypeEl.value = "table";
             childTextEl.innerHTML = "";
             childColumnsEl.value = "";
@@ -767,6 +822,9 @@ Lep pozdrav
 
         function updateQuestionTypeUI() {
             const isYesNo = qTypeEl.value === "yesno";
+            const isTextBlock = qTypeEl.value === "text_block";
+            splitSurveyWrapEl.classList.toggle("hidden", !isTextBlock);
+            hasChildWrapEl.classList.toggle("hidden", !isYesNo);
             if (!isYesNo) {
                 hasChildEl.checked = false;
                 childFieldsEl.classList.add("hidden");
@@ -801,6 +859,7 @@ Lep pozdrav
                 text: text,
                 image: questionImageData || "",
                 units: getSelectedQuestionUnits(),
+                splitSurvey: qTypeEl.value === "text_block" ? splitSurveyEl.checked : false,
                 child: null
             };
 
@@ -902,6 +961,7 @@ Lep pozdrav
               qTextEl.innerHTML = q.text;
             qTypeEl.value = q.type;
             hasChildEl.checked = !!q.child;
+            splitSurveyEl.checked = !!q.splitSurvey;
             childTypeEl.value = q.child?.type || "table";
               childTextEl.innerHTML = q.child ? q.child.text : "";
             childColumnsEl.value = q.child?.type === "text" ? "" : (q.child?.columns || []).join("; ");
@@ -960,6 +1020,7 @@ Lep pozdrav
                                     : "Tekstovni odgovor"
                         )}
                         ${q.image ? " | ima sliko" : ""}
+                        ${q.splitSurvey ? " | razdeli anketo" : ""}
                         ${q.child ? " | ima podvprašanje" : ""}
                     </div>
 
@@ -1036,15 +1097,31 @@ Lep pozdrav
             }
 
             let previewQuestionNumber = 0;
+            let previewSection = 1;
+            const previewColors = state.sectionColors?.length ? state.sectionColors : ["#ffffff", "#eef2ff"];
 
             state.questions.forEach((q, index) => {
+                if (q.type === "text_block" && q.splitSurvey) {
+                    html += `
+                        <div class="survey-card" style="border-style:dashed;">
+                            <div class="top-chip">Konec dela ${previewSection}</div>
+                            <div class="btns" style="margin-top:8px;">
+                                <button type="button">Natisni / Shrani v PDF (del ${previewSection})</button>
+                                <button type="button">Shrani PDF in pošlji (del ${previewSection})</button>
+                                <button type="button">Shrani osnutek (del ${previewSection})</button>
+                                <button type="button">Uvozi osnutek (del ${previewSection})</button>
+                            </div>
+                        </div>
+                    `;
+                    previewSection += 1;
+                }
                 const showQuestionNumber = q.type !== "text_block";
                 if (showQuestionNumber) {
                     previewQuestionNumber += 1;
                 }
 
                 html += `
-            <div class="survey-card">
+            <div class="survey-card" style="background:${previewColors[(previewSection - 1) % previewColors.length]};">
                 <div class="survey-title">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
@@ -1161,6 +1238,9 @@ Lep pozdrav
                     state.surveyTitle = data.surveyTitle || "Vprašalnik {obdobje}";
                     state.surveySubtitle = data.surveySubtitle || "";
                     state.units = Array.isArray(data.units) ? data.units : [];
+                    state.sectionColors = Array.isArray(data.sectionColors)
+                        ? parseSectionColors(data.sectionColors.join(";"))
+                        : parseSectionColors("");
                     state.emailRecipient = data.emailRecipient || "";
                     state.emailSubject = data.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
                     state.emailMessage = data.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -1173,7 +1253,8 @@ Lep pozdrav
                     surveyPeriodEl.value = state.surveyPeriod || "";
                     surveyTitleEl.value = state.surveyTitle;
                     surveySubtitleEl.value = state.surveySubtitle;
-                    unitOptionsEl.value = state.units.join(";");
+                    unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
+                    renderSectionColorChips();
                     surveyEmailEl.value = state.emailRecipient || "";
                     surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
                     surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -1211,6 +1292,7 @@ Lep pozdrav
             return {
                 ...question,
                 units: Array.isArray(question.units) ? question.units : [],
+                splitSurvey: !!question.splitSurvey,
                 child: normalizeChild(question.child)
             };
         }
@@ -1442,6 +1524,14 @@ Lep pozdrav
             display: inline-block;
         }
 
+        .section-actions {
+            border-style: dashed;
+        }
+
+        .print-hidden-temp {
+            display: none !important;
+        }
+
         @media (max-width: 800px) {
             .top-grid {
                 grid-template-columns: 1fr;
@@ -1461,6 +1551,10 @@ Lep pozdrav
             }
 
             .no-print {
+                display: none !important;
+            }
+
+            .print-hidden-temp {
                 display: none !important;
             }
         }
@@ -1517,8 +1611,12 @@ Lep pozdrav
                 <input id="loadDraftInput" type="file" accept=".json,application/json" class="hidden" />
             </div>
 
-            <div class="muted" style="margin-top:10px;">
-                Ko anketo izpolnite, jo spodaj natisnite v PDF, odprite email ali shranite osnutek za kasnejši uvoz.
+            <div class="muted preserve-wrap" style="margin-top:10px;">
+                Izpolnjevanje se sproti shranjuje lokalno v tem brskalniku.
+                • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
+                • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
+                • Shrani osnutek: izvozi JSON osnutek za kasnejši uvoz.
+                • Uvozi osnutek: naloži prej shranjen JSON osnutek.
             </div>
         </div>
     </div>
@@ -1596,20 +1694,22 @@ Lep pozdrav
             return (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
         }
 
-        function collectDraft() {
-            const visibleQuestions = getVisibleQuestionConfigs();
-            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card"));
+        function collectDraft(sectionIndex = null) {
+            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card[data-question-index]"))
+                .filter(card => sectionIndex == null || Number(card.dataset.section) === Number(sectionIndex));
 
             return {
                 version: 1,
                 surveyTitle: CONFIG.surveyTitle || "",
+                sectionIndex: sectionIndex == null ? null : Number(sectionIndex),
                 selectedUnit: document.getElementById("surveyUnit").value || "",
                 personName: document.getElementById("personName").value || "",
                 surveyDate: document.getElementById("surveyDate").value || "",
-                answers: cards.map((card, index) => {
-                    const q = visibleQuestions[index] || {};
+                answers: cards.map((card) => {
+                    const questionIndex = Number(card.dataset.questionIndex);
+                    const q = (getVisibleQuestionConfigs()[questionIndex]) || {};
                     const answer = {
-                        questionId: q.id || null,
+                        questionIndex,
                         type: q.type || null
                     };
 
@@ -1642,10 +1742,11 @@ Lep pozdrav
             };
         }
 
-        function saveDraftToFile() {
-            const draft = collectDraft();
+        function saveDraftToFile(sectionIndex = null) {
+            const draft = collectDraft(sectionIndex);
             const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json;charset=utf-8" });
-            downloadBlob(blob, "Vprašalnik-osnutek.json");
+            const suffix = sectionIndex == null ? "" : "-del-" + sectionIndex;
+            downloadBlob(blob, "Vprašalnik-osnutek" + suffix + ".json");
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
@@ -1671,7 +1772,7 @@ Lep pozdrav
             alert("Vsi odgovori in lokalno shranjen osnutek so bili pobrisani.");
         }
 
-        function applyDraft(draft) {
+        function applyDraft(draft, sectionIndex = null) {
             if (!draft || typeof draft !== "object") {
                 alert("Osnutek ni veljaven.");
                 return;
@@ -1683,12 +1784,12 @@ Lep pozdrav
             document.getElementById("surveyUnit").value = selectedUnit;
             renderSurvey();
 
-            const visibleQuestions = getVisibleQuestionConfigs();
-            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card"));
+            const cards = Array.from(document.querySelectorAll("#surveyContainer > .card[data-question-index]"));
 
-            (draft.answers || []).forEach((answer, index) => {
-                const q = visibleQuestions[index];
-                const card = cards[index];
+            (draft.answers || []).forEach((answer) => {
+                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(answer.questionIndex));
+                if (!card) return;
+                const q = getVisibleQuestionConfigs()[Number(answer.questionIndex)];
                 if (!q || !card) return;
 
                 if (q.type === "text_long") {
@@ -1741,12 +1842,12 @@ Lep pozdrav
             } catch {}
         }
 
-        function importDraft(file) {
+        function importDraft(file, sectionIndex = null) {
             const reader = new FileReader();
             reader.onload = function (e) {
                 try {
                     const draft = JSON.parse(e.target.result);
-                    applyDraft(draft);
+                    applyDraft(draft, sectionIndex);
                 } catch {
                     alert("Napaka pri uvozu osnutka.");
                 }
@@ -1812,6 +1913,31 @@ Lep pozdrav
             }
         }
 
+        function printSection(sectionIndex) {
+            if (!requirePersonName()) return;
+            updateDocumentTitleForPdf();
+            const hiddenCards = Array.from(document.querySelectorAll("#surveyContainer > .card[data-section]"))
+                .filter(card => Number(card.dataset.section) !== Number(sectionIndex));
+            hiddenCards.forEach(card => card.classList.add("print-hidden-temp"));
+            window.print();
+            setTimeout(() => hiddenCards.forEach(card => card.classList.remove("print-hidden-temp")), 250);
+        }
+
+        function renderSectionActions(container, sectionIndex) {
+            const card = document.createElement("div");
+            card.className = "card no-print section-actions";
+            card.innerHTML = `
+                <div><strong>Akcije za del ${sectionIndex}</strong></div>
+                <div class="btns">
+                    <button type="button" data-section-action="print" data-section="${sectionIndex}">Natisni / Shrani v PDF (del ${sectionIndex})</button>
+                    <button type="button" data-section-action="mail" data-section="${sectionIndex}">Shrani PDF in pošlji (del ${sectionIndex})</button>
+                    <button type="button" data-section-action="save" data-section="${sectionIndex}">Shrani osnutek (del ${sectionIndex})</button>
+                    <button type="button" data-section-action="load" data-section="${sectionIndex}">Uvozi osnutek (del ${sectionIndex})</button>
+                </div>
+            `;
+            container.appendChild(card);
+        }
+
         function renderSurvey() {
             const unitSelect = document.getElementById("surveyUnit");
 
@@ -1828,10 +1954,20 @@ Lep pozdrav
             const selectedUnit = unitSelect.value;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
+            let sectionIndex = 1;
+            const sectionColors = Array.isArray(CONFIG.sectionColors) && CONFIG.sectionColors.length
+                ? CONFIG.sectionColors
+                : ["#ffffff", "#eef2ff"];
             container.innerHTML = "";
 
-            (CONFIG.questions || []).forEach((q) => {
+            const visibleQuestions = (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+
+            visibleQuestions.forEach((q, questionIndex) => {
                 if (!questionAppliesToUnit(q, selectedUnit)) return;
+                if (q.type === "text_block" && q.splitSurvey) {
+                    renderSectionActions(container, sectionIndex);
+                    sectionIndex += 1;
+                }
 
                 const showQuestionNumber = q.type !== "text_block";
                 if (showQuestionNumber) {
@@ -1840,6 +1976,9 @@ Lep pozdrav
 
                 const card = document.createElement("div");
                 card.className = "card";
+                card.dataset.section = String(sectionIndex);
+                card.dataset.questionIndex = String(questionIndex);
+                card.style.background = sectionColors[(sectionIndex - 1) % sectionColors.length];
 
                 const title = document.createElement("div");
                 title.className = "question-title";
@@ -1965,6 +2104,8 @@ Lep pozdrav
 
                 container.appendChild(card);
             });
+
+            renderSectionActions(container, sectionIndex);
         }
 
         document.getElementById("surveyUnit").addEventListener("change", () => {
@@ -1982,6 +2123,8 @@ Lep pozdrav
             } catch {}
         });
 
+        let pendingLoadSection = null;
+
         document.getElementById("printPdfBtn").addEventListener("click", () => {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
@@ -1993,8 +2136,30 @@ Lep pozdrav
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
         document.getElementById("loadDraftInput").addEventListener("change", (e) => {
             const file = e.target.files && e.target.files[0];
-            if (file) importDraft(file);
+            if (file) importDraft(file, pendingLoadSection);
+            pendingLoadSection = null;
             e.target.value = "";
+        });
+
+        document.addEventListener("click", (event) => {
+            const btn = event.target.closest("[data-section-action]");
+            if (!btn) return;
+            const sectionIndex = Number(btn.dataset.section);
+            const action = btn.dataset.sectionAction;
+
+            if (action === "print") {
+                printSection(sectionIndex);
+            } else if (action === "mail") {
+                const mailOpened = openMailClient();
+                if (mailOpened) {
+                    setTimeout(() => printSection(sectionIndex), 250);
+                }
+            } else if (action === "save") {
+                saveDraftToFile(sectionIndex);
+            } else if (action === "load") {
+                pendingLoadSection = sectionIndex;
+                document.getElementById("loadDraftInput").click();
+            }
         });
 
         updateDocumentTitleForPdf();
@@ -2033,6 +2198,7 @@ Lep pozdrav
         }
 
         hasChildEl.addEventListener("change", updateQuestionTypeUI);
+        hasChildEl.addEventListener("input", updateQuestionTypeUI);
         qTypeEl.addEventListener("change", updateQuestionTypeUI);
 
         surveyPeriodEl.addEventListener("input", renderPreview);
@@ -2045,6 +2211,12 @@ Lep pozdrav
         unitOptionsEl.addEventListener("input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
+            renderPreview();
+        });
+        document.getElementById("addSectionColorBtn").addEventListener("click", () => {
+            const nextColor = sectionColorPickerEl.value || "#eef2ff";
+            state.sectionColors.push(nextColor);
+            renderSectionColorChips();
             renderPreview();
         });
 
@@ -2071,7 +2243,7 @@ Lep pozdrav
         surveyPeriodEl.value = state.surveyPeriod || "";
         surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
         surveySubtitleEl.value = state.surveySubtitle || "";
-        unitOptionsEl.value = (state.units || []).join(";");
+        unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
         surveyEmailEl.value = state.emailRecipient || "";
         surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
         surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -2079,6 +2251,7 @@ Lep pozdrav
 
         renderAll();
         renderUnitCheckboxes([]);
+        renderSectionColorChips();
         updateQuestionTypeUI();
 
         window.editQuestion = editQuestion;
