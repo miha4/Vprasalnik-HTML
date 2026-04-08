@@ -532,6 +532,13 @@ Lep pozdrav
                 </div>
 
                 <div class="panel">
+                    <div class="section">
+                        <h2>Deli ankete</h2>
+                        <div id="sectionOverview" class="question-list"></div>
+                    </div>
+                </div>
+
+                <div class="panel">
                 <div class="section">
                     <h2>Uvoz / izvoz konfiguracije</h2>
 
@@ -599,6 +606,7 @@ Lep pozdrav
         const childColumnsEl = document.getElementById("childColumns");
         const childColumnsWrapEl = document.getElementById("childColumnsWrap");
         const questionListEl = document.getElementById("questionList");
+        const sectionOverviewEl = document.getElementById("sectionOverview");
         const previewContainerEl = document.getElementById("previewContainer");
         const statusEl = document.getElementById("status");
 
@@ -685,6 +693,7 @@ Lep pozdrav
                     if (state.sectionColors.length === 1) return;
                     state.sectionColors.splice(index, 1);
                     renderSectionColorChips();
+                    renderSectionOverview();
                     renderPreview();
                 });
                 sectionColorChipsEl.appendChild(chip);
@@ -1052,6 +1061,39 @@ Lep pozdrav
     `).join("");
         }
 
+        function getSectionCount() {
+            let count = 1;
+            state.questions.forEach(q => {
+                if (q.type === "text_block" && q.splitSurvey) count += 1;
+            });
+            return count;
+        }
+
+        function ensureSectionColors() {
+            const sectionCount = getSectionCount();
+            while (state.sectionColors.length < sectionCount) {
+                state.sectionColors.push(state.sectionColors[state.sectionColors.length - 1] || "#eef2ff");
+            }
+        }
+
+        function renderSectionOverview() {
+            if (!sectionOverviewEl) return;
+            ensureSectionColors();
+            const sectionCount = getSectionCount();
+            sectionOverviewEl.innerHTML = "";
+            for (let i = 0; i < sectionCount; i += 1) {
+                const wrap = document.createElement("div");
+                wrap.className = "question-item";
+                wrap.innerHTML = `
+                    <div class="question-head">
+                        <div><strong>Del ${i + 1}</strong></div>
+                        <input type="color" value="${escapeHtml(state.sectionColors[i] || "#eef2ff")}" data-section-color-index="${i}" style="width:46px; padding:2px;" />
+                    </div>
+                `;
+                sectionOverviewEl.appendChild(wrap);
+            }
+        }
+
         function renderPreview() {
             syncSettingsFromInputs();
 
@@ -1098,6 +1140,7 @@ Lep pozdrav
 
             let previewQuestionNumber = 0;
             let previewSection = 1;
+            ensureSectionColors();
             const previewColors = state.sectionColors?.length ? state.sectionColors : ["#ffffff", "#eef2ff"];
 
             state.questions.forEach((q, index) => {
@@ -1181,6 +1224,7 @@ Lep pozdrav
         function renderAll() {
             renderTopbarLogo();
             renderQuestionList();
+            renderSectionOverview();
             renderPreview();
         }
 
@@ -2196,44 +2240,60 @@ Lep pozdrav
             }
         }
 
-        hasChildEl.addEventListener("change", updateQuestionTypeUI);
-        hasChildEl.addEventListener("input", updateQuestionTypeUI);
-        qTypeEl.addEventListener("change", updateQuestionTypeUI);
+        function on(el, eventName, handler) {
+            if (el && typeof el.addEventListener === "function") {
+                el.addEventListener(eventName, handler);
+            }
+        }
 
-        surveyPeriodEl.addEventListener("input", renderPreview);
-        surveyTitleEl.addEventListener("input", renderPreview);
-        surveySubtitleEl.addEventListener("input", renderPreview);
-        surveyEmailEl.addEventListener("input", renderPreview);
-        surveyEmailSubjectEl.addEventListener("input", renderPreview);
-        surveyEmailMessageEl.addEventListener("input", renderPreview);
-        surveyPdfFileNameEl.addEventListener("input", renderPreview);
-        sectionColorPaletteEl.addEventListener("input", renderPreview);
-        unitOptionsEl.addEventListener("input", () => {
+        on(hasChildEl, "change", updateQuestionTypeUI);
+        on(hasChildEl, "input", updateQuestionTypeUI);
+        on(qTypeEl, "change", updateQuestionTypeUI);
+
+        on(surveyPeriodEl, "input", renderPreview);
+        on(surveyTitleEl, "input", renderPreview);
+        on(surveySubtitleEl, "input", renderPreview);
+        on(surveyEmailEl, "input", renderPreview);
+        on(surveyEmailSubjectEl, "input", renderPreview);
+        on(surveyEmailMessageEl, "input", renderPreview);
+        on(surveyPdfFileNameEl, "input", renderPreview);
+        on(unitOptionsEl, "input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
             renderPreview();
         });
-        document.getElementById("addSectionColorBtn").addEventListener("click", () => {
+        on(document.getElementById("addSectionColorBtn"), "click", () => {
             const nextColor = sectionColorPickerEl.value || "#eef2ff";
             state.sectionColors.push(nextColor);
+            renderSectionColorChips();
+            renderSectionOverview();
+            renderPreview();
+        });
+
+        on(document, "input", (event) => {
+            const colorInput = event.target.closest("[data-section-color-index]");
+            if (!colorInput) return;
+            const index = Number(colorInput.getAttribute("data-section-color-index"));
+            if (Number.isNaN(index)) return;
+            state.sectionColors[index] = colorInput.value || state.sectionColors[index] || "#eef2ff";
             renderSectionColorChips();
             renderPreview();
         });
 
-        document.getElementById("saveQuestionBtn").addEventListener("click", saveQuestion);
-        document.getElementById("resetQuestionBtn").addEventListener("click", () => {
+        on(document.getElementById("saveQuestionBtn"), "click", saveQuestion);
+        on(document.getElementById("resetQuestionBtn"), "click", () => {
             resetQuestionForm();
             setStatus("Obrazec počiščen.");
         });
 
-        document.getElementById("exportConfigBtn").addEventListener("click", exportConfig);
-        document.getElementById("exportSurveyBtn").addEventListener("click", exportSurvey);
+        on(document.getElementById("exportConfigBtn"), "click", exportConfig);
+        on(document.getElementById("exportSurveyBtn"), "click", exportSurvey);
 
-        document.getElementById("importConfigBtn").addEventListener("click", () => {
+        on(document.getElementById("importConfigBtn"), "click", () => {
             document.getElementById("importConfigInput").click();
         });
 
-        document.getElementById("importConfigInput").addEventListener("change", (e) => {
+        on(document.getElementById("importConfigInput"), "change", (e) => {
             const file = e.target.files && e.target.files[0];
             if (file) importConfig(file);
             e.target.value = "";
