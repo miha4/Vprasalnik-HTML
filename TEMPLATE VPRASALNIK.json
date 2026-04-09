@@ -21,7 +21,8 @@
       "text": "1. DEL: Prosimo, da odgovore pošljete nazaj do 25. 5. 2026.",
       "image": "",
       "units": [],
-      "child": null
+      "child": null,
+      "part": 1
     },
     {
       "id": "q_1773840425016_63",
@@ -38,7 +39,8 @@
           "Stari tim",
           "Novi tim"
         ]
-      }
+      },
+      "part": 1
     },
     {
       "id": "q_1773840493500_128",
@@ -55,7 +57,8 @@
           "Datum pridobitve",
           "Tim v katerega bo razporejen"
         ]
-      }
+      },
+      "part": 1
     },
     {
       "id": "q_1773840590159_915",
@@ -72,7 +75,8 @@
           "Vrsta spremembe"
         ]
       },
-      "units": []
+      "units": [],
+      "part": 1
     },
     {
       "id": "q_1773840766489_471",
@@ -88,7 +92,8 @@
           "Termin dopusta ki se ne točkuje v 2025C"
         ]
       },
-      "units": []
+      "units": [],
+      "part": 1
     },
     {
       "id": "q_1773840689978_397",
@@ -104,7 +109,8 @@
           "Kontrolor",
           "Datum odpovedanega termina"
         ]
-      }
+      },
+      "part": 1
     },
     {
       "id": "q_1773997803158_152",
@@ -112,7 +118,8 @@
       "text": "Navedite dneve, ko je bila enota zaprta zaradi izrednega zaprtja zračnega prostora ali letališča, med katerimi se zaposlenim koriščeni dnevi dopusta ne točkujejo.",
       "image": "",
       "units": [],
-      "child": null
+      "child": null,
+      "part": 1
     },
     {
       "id": "q_1773997860001_780",
@@ -120,7 +127,8 @@
       "text": "Navedite predvideno dnevno sestavo izmen (konfiguracijo) oz. minimalno število kontrolorjev, ki jih potrebujete za normalno obratovanje enote v {obdobje}.",
       "image": "",
       "units": [],
-      "child": null
+      "child": null,
+      "part": 1
     },
     {
       "id": "q_1773997972939_873",
@@ -128,7 +136,8 @@
       "text": "Prosimo, da pošljete dokument z želenimi konfiguracijami za {obdobje}. Na voljo imate vzored obdobja v excelu na portalu. Dokument si naložite na svoj računalnik, vanj vnesite svoje podatke in ga pošljite skupaj z anketo. V kolikor imate dodatne informacije jih prosim vnesite spodaj. Povezava do vzorčne datoteke:&nbsp;<a href=\"https://portal.kzps.si/sites/szp/planiranje/delovni_nacrti/Muster_za_vprasalnik_konfiguracije.xlsx?e=d9iujK\" target=\"_blank\" rel=\"noopener noreferrer\">POVEZAVA</a>",
       "image": "",
       "units": [],
-      "child": null
+      "child": null,
+      "part": 1
     },
     {
       "id": "q_1773998005960_859",
@@ -136,7 +145,8 @@
       "text": "Informacije, za katere menite, da so še pomembne za načrtovanje obdobja {obdobje} lahko navedete spodaj.",
       "image": "",
       "units": [],
-      "child": null
+      "child": null,
+      "part": 1
     },
     {
       "id": "q_1774273340507_842",
@@ -144,7 +154,8 @@
       "text": "2. DEL: Prosimo, da odgovore pošljete nazaj do 25. 6. 2025.",
       "image": "",
       "units": [],
-      "child": null
+      "child": null,
+      "part": 1
     }
   ]
 }
