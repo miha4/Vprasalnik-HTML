@@ -1912,6 +1912,42 @@ Lep pozdrav
 
     <script>
         const CONFIG = ${json};
+        const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
+
+        function parseUnits(value) {
+            return String(value || "")
+                .split(/[\\n,;]+/)
+                .map(x => x.trim())
+                .filter(Boolean);
+        }
+
+        function normalizeRuntimeConfig(config) {
+            const source = config && typeof config === "object" ? config : {};
+            const sections = Array.isArray(source.sections) && source.sections.length
+                ? source.sections.map((section, index) => ({
+                    id: section?.id || ("sec_" + (index + 1)),
+                    title: section?.title || ("Del " + (index + 1)),
+                    description: section?.description || "",
+                    color: section?.color || "#eef2ff"
+                }))
+                : [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }];
+
+            const sectionQuestions = sections.flatMap(section => Array.isArray(section?.questions) ? section.questions : []);
+            const questions = Array.isArray(source.questions) && source.questions.length
+                ? source.questions
+                : sectionQuestions;
+
+            const units = Array.isArray(source.units) && source.units.length
+                ? source.units
+                : parseUnits(source.unitOptions || source.unitOption || "");
+
+            return {
+                ...source,
+                sections,
+                questions,
+                units
+            };
+        }
 
         function applyTemplatePlaceholders(template, values = {}) {
             let result = String(template || "");
@@ -1927,7 +1963,7 @@ Lep pozdrav
 
         function getRuntimePlaceholderValues() {
             return {
-                obdobje: (CONFIG.surveyPeriod || "").trim(),
+                obdobje: (RUNTIME_CONFIG.surveyPeriod || "").trim(),
                 enota: (document.getElementById("surveyUnit")?.value || "").trim(),
                 imeinpriimek: (document.getElementById("personName")?.value || "").trim()
             };
@@ -1980,7 +2016,7 @@ Lep pozdrav
 
         function getVisibleQuestionConfigs() {
             const selectedUnit = document.getElementById("surveyUnit").value;
-            const allQuestions = Array.isArray(CONFIG.questions) ? CONFIG.questions : [];
+            const allQuestions = Array.isArray(RUNTIME_CONFIG.questions) ? RUNTIME_CONFIG.questions : [];
             return allQuestions.filter(q => questionAppliesToUnit(q, selectedUnit));
         }
 
@@ -1990,7 +2026,7 @@ Lep pozdrav
 
             return {
                 version: 1,
-                surveyTitle: CONFIG.surveyTitle || "",
+                surveyTitle: RUNTIME_CONFIG.surveyTitle || "",
                 sectionIndex: sectionIndex == null ? null : Number(sectionIndex),
                 selectedUnit: document.getElementById("surveyUnit").value || "",
                 personName: document.getElementById("personName").value || "",
@@ -2147,7 +2183,7 @@ Lep pozdrav
         }
 
         function getPdfFileName() {
-            const baseName = applyRuntimePlaceholders(CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota}")
+            const baseName = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota}")
                 .trim()
                 .replace(/[\\/:*?"<>|]+/g, "-")
                 .replace(/\\s+/g, " ");
@@ -2159,7 +2195,7 @@ Lep pozdrav
         }
 
         function openMailClient() {
-            const recipient = (CONFIG.emailRecipient || "").trim();
+            const recipient = (RUNTIME_CONFIG.emailRecipient || "").trim();
             if (!recipient) {
                 alert("Email prejemnika ni nastavljen.");
                 return false;
@@ -2168,8 +2204,8 @@ Lep pozdrav
             const personName = requirePersonName();
             if (!personName) return false;
 
-            const rawSubject = applyRuntimePlaceholders(CONFIG.emailSubject || ((CONFIG.surveyTitle || "Vprašalnik") + " - PDF"));
-            const rawBody = applyRuntimePlaceholders(CONFIG.emailMessage || "");
+            const rawSubject = applyRuntimePlaceholders(RUNTIME_CONFIG.emailSubject || ((RUNTIME_CONFIG.surveyTitle || "Vprašalnik") + " - PDF"));
+            const rawBody = applyRuntimePlaceholders(RUNTIME_CONFIG.emailMessage || "");
             const subject = encodeURIComponent(rawSubject);
             const body = encodeURIComponent(rawBody.split("\\n").join("\\r\\n"));
             const mailtoUrl = "mailto:" + recipient + "?subject=" + subject + "&body=" + body;
@@ -2229,32 +2265,25 @@ Lep pozdrav
         function renderSurvey() {
             const unitSelect = document.getElementById("surveyUnit");
 
-            if (!unitSelect.dataset.loaded) {
-                (CONFIG.units || []).forEach(unit => {
-                    const opt = document.createElement("option");
-                    opt.value = unit;
-                    opt.textContent = unit;
-                    unitSelect.appendChild(opt);
-                });
-                unitSelect.dataset.loaded = "1";
+            const previousSelection = unitSelect.value;
+            unitSelect.innerHTML = '<option value="">-- izberi enoto --</option>';
+            (RUNTIME_CONFIG.units || []).forEach(unit => {
+                const opt = document.createElement("option");
+                opt.value = unit;
+                opt.textContent = unit;
+                unitSelect.appendChild(opt);
+            });
+            if (previousSelection) {
+                unitSelect.value = previousSelection;
             }
-
             const selectedUnit = unitSelect.value;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
-            const rawSections = Array.isArray(CONFIG.sections) && CONFIG.sections.length
-                ? CONFIG.sections
-                : [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }];
-            const sections = rawSections.map((section, index) => ({
-                id: section?.id || ("sec_" + (index + 1)),
-                title: section?.title || ("Del " + (index + 1)),
-                description: section?.description || "",
-                color: section?.color || "#eef2ff"
-            }));
+            const sections = RUNTIME_CONFIG.sections;
             const sectionIdSet = new Set(sections.map(section => section.id));
             container.innerHTML = "";
 
-            const allQuestions = Array.isArray(CONFIG.questions) ? CONFIG.questions : [];
+            const allQuestions = Array.isArray(RUNTIME_CONFIG.questions) ? RUNTIME_CONFIG.questions : [];
             const visibleQuestions = allQuestions.filter(q => questionAppliesToUnit(q, selectedUnit));
             let questionIndex = -1;
 
