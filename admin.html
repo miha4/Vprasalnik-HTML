@@ -1980,7 +1980,8 @@ Lep pozdrav
 
         function getVisibleQuestionConfigs() {
             const selectedUnit = document.getElementById("surveyUnit").value;
-            return (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+            const allQuestions = Array.isArray(CONFIG.questions) ? CONFIG.questions : [];
+            return allQuestions.filter(q => questionAppliesToUnit(q, selectedUnit));
         }
 
         function collectDraft(sectionIndex = null) {
@@ -2238,12 +2239,20 @@ Lep pozdrav
             const selectedUnit = unitSelect.value;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
-            const sections = Array.isArray(CONFIG.sections) && CONFIG.sections.length
+            const rawSections = Array.isArray(CONFIG.sections) && CONFIG.sections.length
                 ? CONFIG.sections
                 : [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }];
+            const sections = rawSections.map((section, index) => ({
+                id: section?.id || ("sec_" + (index + 1)),
+                title: section?.title || ("Del " + (index + 1)),
+                description: section?.description || "",
+                color: section?.color || "#eef2ff"
+            }));
+            const sectionIdSet = new Set(sections.map(section => section.id));
             container.innerHTML = "";
 
-            const visibleQuestions = (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+            const allQuestions = Array.isArray(CONFIG.questions) ? CONFIG.questions : [];
+            const visibleQuestions = allQuestions.filter(q => questionAppliesToUnit(q, selectedUnit));
             let questionIndex = -1;
 
             sections.forEach((section, sectionIndex) => {
@@ -2261,7 +2270,10 @@ Lep pozdrav
                 const questionsWrap = document.createElement("div");
                 questionsWrap.className = "section-questions";
 
-                visibleQuestions.filter(q => (q.sectionId || sections[0].id) === section.id).forEach((q) => {
+                visibleQuestions.filter(q => {
+                    const targetSectionId = sectionIdSet.has(q.sectionId) ? q.sectionId : sections[0].id;
+                    return targetSectionId === section.id;
+                }).forEach((q) => {
                 questionIndex += 1;
 
                 const showQuestionNumber = q.type !== "text_block";
