@@ -2033,9 +2033,12 @@ Lep pozdrav
         }
 
         function injectDraftIntoCurrentHtml(draft) {
-            const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-            const safeJson = JSON.stringify(draft).replace(/</g, "\u003c");
-            const pattern = /(<template id="savedDraftData">)([\s\S]*?)(<\/template>)/;
+            const html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+            const safeJson = JSON.stringify(draft)
+                .replace(/</g, "\\u003c")
+                .replace(/>/g, "\\u003e")
+                .replace(/&/g, "\\u0026");
+            const pattern = /(<template id="savedDraftData">)([\\s\\S]*?)(<\\/template>)/;
             if (pattern.test(html)) {
                 return html.replace(pattern, "$1" + safeJson + "$3");
             }
@@ -2147,12 +2150,12 @@ Lep pozdrav
             const baseName = applyRuntimePlaceholders(CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota}")
                 .trim()
                 .replace(/[\\/:*?"<>|]+/g, "-")
-                .replace(/\s+/g, " ");
+                .replace(/\\s+/g, " ");
             return (baseName || "Vprašalnik") + ".pdf";
         }
 
         function updateDocumentTitleForPdf() {
-            document.title = getPdfFileName().replace(/\.pdf$/i, "");
+            document.title = getPdfFileName().replace(/\\.pdf$/i, "");
         }
 
         function openMailClient() {
