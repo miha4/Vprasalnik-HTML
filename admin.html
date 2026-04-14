@@ -1380,8 +1380,8 @@ Lep pozdrav
                         <div class="btns">
                             <button type="button">Natisni / Shrani v PDF</button>
                             <button type="button">Shrani PDF in pošlji</button>
-                            <button type="button">Shrani osnutek</button>
-                            <button type="button">Uvozi osnutek</button>
+                            <button type="button">Shrani vprašalnik</button>
+                            <button type="button">Uvozi vprašalnik</button>
                         </div>
                     </div>
                 </div>`;
@@ -1896,20 +1896,22 @@ Lep pozdrav
             <div class="btns main-actions">
                 <button type="button" id="printPdfBtn">Natisni / Shrani v PDF</button>
                 <button type="button" id="printAndMailBtn">Shrani PDF in pošlji</button>
-                <button type="button" id="saveDraftBtn">Shrani osnutek</button>
-                <button type="button" id="loadDraftBtn">Uvozi osnutek</button>
-                <input id="loadDraftInput" type="file" accept=".json,application/json" class="hidden" />
+                <button type="button" id="saveDraftBtn">Shrani vprašalnik</button>
+                <button type="button" id="loadDraftBtn">Uvozi vprašalnik</button>
+                <input id="loadDraftInput" type="file" accept=".json,.html,text/html,application/json" class="hidden" />
             </div>
 
             <div class="muted preserve-wrap" style="margin-top:10px;">
                 Izpolnjevanje se sproti shranjuje lokalno v tem brskalniku.
                 • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
                 • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
-                • Shrani osnutek: izvozi JSON osnutek za kasnejši uvoz.
-                • Uvozi osnutek: naloži prej shranjen JSON osnutek.
+                • Shrani vprašalnik: izvozi .html datoteko z vgrajenimi odgovori za kasnejše nadaljevanje.
+                • Uvozi vprašalnik: naloži prej shranjen .html vprašalnik ali starejši JSON osnutek.
             </div>
         </div>
     </div>
+
+    <script id="savedDraftData" type="application/json"></script>
 
     <script>
         const CONFIG = ${json};
@@ -2032,11 +2034,22 @@ Lep pozdrav
             };
         }
 
+        function injectDraftIntoCurrentHtml(draft) {
+            const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+            const safeJson = JSON.stringify(draft).replace(/</g, "\u003c");
+            const pattern = /(<script id="savedDraftData" type="application\/json">)([\s\S]*?)(<\/script>)/;
+            if (pattern.test(html)) {
+                return html.replace(pattern, "$1" + safeJson + "$3");
+            }
+            return html;
+        }
+
         function saveDraftToFile(sectionIndex = null) {
             const draft = collectDraft(sectionIndex);
-            const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json;charset=utf-8" });
             const suffix = sectionIndex == null ? "" : "-del-" + sectionIndex;
-            downloadBlob(blob, "Vprašalnik-osnutek" + suffix + ".json");
+            const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
+            const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
+            downloadBlob(blob, "Vprašalnik-osnutek" + suffix + ".html");
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
@@ -2132,14 +2145,33 @@ Lep pozdrav
             } catch {}
         }
 
+        function parseDraftFromImportedText(rawText) {
+            const text = String(rawText || "").trim();
+            if (!text) {
+                throw new Error("Datoteka je prazna.");
+            }
+
+            try {
+                return JSON.parse(text);
+            } catch {
+                const parsed = new DOMParser().parseFromString(text, "text/html");
+                const embeddedDraft = parsed.getElementById("savedDraftData");
+                const embeddedText = embeddedDraft ? embeddedDraft.textContent : "";
+                if (!embeddedText || !embeddedText.trim()) {
+                    throw new Error("V HTML ni vgrajenega osnutka.");
+                }
+                return JSON.parse(embeddedText);
+            }
+        }
+
         function importDraft(file, sectionIndex = null) {
             const reader = new FileReader();
             reader.onload = function (e) {
                 try {
-                    const draft = JSON.parse(e.target.result);
+                    const draft = parseDraftFromImportedText(e.target.result);
                     applyDraft(draft, sectionIndex);
                 } catch {
-                    alert("Napaka pri uvozu osnutka.");
+                    alert("Napaka pri uvozu vprašalnika/osnutka.");
                 }
             };
             reader.readAsText(file, "utf-8");
@@ -2220,8 +2252,8 @@ Lep pozdrav
                 '<div class="btns">' +
                     '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
                     '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji</button>' +
-                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani osnutek</button>' +
-                    '<button type="button" data-section-action="load" data-section="' + sectionIndex + '">Uvozi osnutek</button>' +
+                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani vprašalnik</button>' +
+                    '<button type="button" data-section-action="load" data-section="' + sectionIndex + '">Uvozi vprašalnik</button>' +
                 '</div>';
             return card;
         }
@@ -2465,6 +2497,15 @@ Lep pozdrav
 
         updateDocumentTitleForPdf();
         renderSurvey();
+
+        try {
+            const embeddedDraftText = document.getElementById("savedDraftData")?.textContent || "";
+            if (embeddedDraftText.trim()) {
+                applyDraft(JSON.parse(embeddedDraftText));
+            }
+        } catch {
+            console.warn("Vgrajenega osnutka ni bilo mogoče prebrati.");
+        }
 
         try {
             const backup = localStorage.getItem("VprašalnikDraftBackup");
