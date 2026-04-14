@@ -1908,7 +1908,7 @@ Lep pozdrav
         </div>
     </div>
 
-    <script id="savedDraftData" type="application/json"></script>
+    <template id="savedDraftData"></template>
 
     <script>
         const CONFIG = ${json};
@@ -2034,7 +2034,7 @@ Lep pozdrav
         function injectDraftIntoCurrentHtml(draft) {
             const html = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
             const safeJson = JSON.stringify(draft).replace(/</g, "\u003c");
-            const pattern = /(<script id="savedDraftData" type="application\/json">)([\s\S]*?)(<\/script>)/;
+            const pattern = /(<template id="savedDraftData">)([\s\S]*?)(<\/template>)/;
             if (pattern.test(html)) {
                 return html.replace(pattern, "$1" + safeJson + "$3");
             }
