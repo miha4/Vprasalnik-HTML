@@ -1380,8 +1380,7 @@ Lep pozdrav
                         <div class="btns">
                             <button type="button">Natisni / Shrani v PDF</button>
                             <button type="button">Shrani PDF in pošlji</button>
-                            <button type="button">Shrani osnutek</button>
-                            <button type="button">Uvozi osnutek</button>
+                            <button type="button">Shrani vprašalnik</button>
                         </div>
                     </div>
                 </div>`;
@@ -1896,20 +1895,20 @@ Lep pozdrav
             <div class="btns main-actions">
                 <button type="button" id="printPdfBtn">Natisni / Shrani v PDF</button>
                 <button type="button" id="printAndMailBtn">Shrani PDF in pošlji</button>
-                <button type="button" id="saveDraftBtn">Shrani osnutek</button>
-                <button type="button" id="loadDraftBtn">Uvozi osnutek</button>
-                <input id="loadDraftInput" type="file" accept=".json,application/json" class="hidden" />
+                <button type="button" id="saveDraftBtn">Shrani vprašalnik</button>
             </div>
 
             <div class="muted preserve-wrap" style="margin-top:10px;">
                 Izpolnjevanje se sproti shranjuje lokalno v tem brskalniku.
                 • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
                 • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
-                • Shrani osnutek: izvozi JSON osnutek za kasnejši uvoz.
-                • Uvozi osnutek: naloži prej shranjen JSON osnutek.
+                • Shrani vprašalnik: shrani trenutno stanje odgovorov v novo .html datoteko.
+                • Za nadaljevanje kasneje odpri shranjeno .html datoteko.
             </div>
         </div>
     </div>
+
+    <template id="savedDraftData"></template>
 
     <script>
         const CONFIG = ${json};
@@ -1981,7 +1980,8 @@ Lep pozdrav
 
         function getVisibleQuestionConfigs() {
             const selectedUnit = document.getElementById("surveyUnit").value;
-            return (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+            const allQuestions = Array.isArray(CONFIG.questions) ? CONFIG.questions : [];
+            return allQuestions.filter(q => questionAppliesToUnit(q, selectedUnit));
         }
 
         function collectDraft(sectionIndex = null) {
@@ -2032,11 +2032,25 @@ Lep pozdrav
             };
         }
 
+        function injectDraftIntoCurrentHtml(draft) {
+            const html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+            const safeJson = JSON.stringify(draft)
+                .replace(/</g, "\\u003c")
+                .replace(/>/g, "\\u003e")
+                .replace(/&/g, "\\u0026");
+            const pattern = /(<template id="savedDraftData">)([\\s\\S]*?)(<\\/template>)/;
+            if (pattern.test(html)) {
+                return html.replace(pattern, "$1" + safeJson + "$3");
+            }
+            return html;
+        }
+
         function saveDraftToFile(sectionIndex = null) {
             const draft = collectDraft(sectionIndex);
-            const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json;charset=utf-8" });
             const suffix = sectionIndex == null ? "" : "-del-" + sectionIndex;
-            downloadBlob(blob, "Vprašalnik-osnutek" + suffix + ".json");
+            const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
+            const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
+            downloadBlob(blob, "Vprašalnik-osnutek" + suffix + ".html");
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
@@ -2132,29 +2146,16 @@ Lep pozdrav
             } catch {}
         }
 
-        function importDraft(file, sectionIndex = null) {
-            const reader = new FileReader();
-            reader.onload = function (e) {
-                try {
-                    const draft = JSON.parse(e.target.result);
-                    applyDraft(draft, sectionIndex);
-                } catch {
-                    alert("Napaka pri uvozu osnutka.");
-                }
-            };
-            reader.readAsText(file, "utf-8");
-        }
-
         function getPdfFileName() {
             const baseName = applyRuntimePlaceholders(CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota}")
                 .trim()
                 .replace(/[\\/:*?"<>|]+/g, "-")
-                .replace(/\s+/g, " ");
+                .replace(/\\s+/g, " ");
             return (baseName || "Vprašalnik") + ".pdf";
         }
 
         function updateDocumentTitleForPdf() {
-            document.title = getPdfFileName().replace(/\.pdf$/i, "");
+            document.title = getPdfFileName().replace(/\\.pdf$/i, "");
         }
 
         function openMailClient() {
@@ -2220,8 +2221,7 @@ Lep pozdrav
                 '<div class="btns">' +
                     '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
                     '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji</button>' +
-                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani osnutek</button>' +
-                    '<button type="button" data-section-action="load" data-section="' + sectionIndex + '">Uvozi osnutek</button>' +
+                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani vprašalnik</button>' +
                 '</div>';
             return card;
         }
@@ -2242,12 +2242,20 @@ Lep pozdrav
             const selectedUnit = unitSelect.value;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
-            const sections = Array.isArray(CONFIG.sections) && CONFIG.sections.length
+            const rawSections = Array.isArray(CONFIG.sections) && CONFIG.sections.length
                 ? CONFIG.sections
                 : [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }];
+            const sections = rawSections.map((section, index) => ({
+                id: section?.id || ("sec_" + (index + 1)),
+                title: section?.title || ("Del " + (index + 1)),
+                description: section?.description || "",
+                color: section?.color || "#eef2ff"
+            }));
+            const sectionIdSet = new Set(sections.map(section => section.id));
             container.innerHTML = "";
 
-            const visibleQuestions = (CONFIG.questions || []).filter(q => questionAppliesToUnit(q, selectedUnit));
+            const allQuestions = Array.isArray(CONFIG.questions) ? CONFIG.questions : [];
+            const visibleQuestions = allQuestions.filter(q => questionAppliesToUnit(q, selectedUnit));
             let questionIndex = -1;
 
             sections.forEach((section, sectionIndex) => {
@@ -2265,7 +2273,10 @@ Lep pozdrav
                 const questionsWrap = document.createElement("div");
                 questionsWrap.className = "section-questions";
 
-                visibleQuestions.filter(q => (q.sectionId || sections[0].id) === section.id).forEach((q) => {
+                visibleQuestions.filter(q => {
+                    const targetSectionId = sectionIdSet.has(q.sectionId) ? q.sectionId : sections[0].id;
+                    return targetSectionId === section.id;
+                }).forEach((q) => {
                 questionIndex += 1;
 
                 const showQuestionNumber = q.type !== "text_block";
@@ -2424,8 +2435,6 @@ Lep pozdrav
             } catch {}
         });
 
-        let pendingLoadSection = null;
-
         document.getElementById("printPdfBtn").addEventListener("click", () => {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
@@ -2433,14 +2442,7 @@ Lep pozdrav
         });
         document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
         document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
-        document.getElementById("loadDraftBtn").addEventListener("click", () => document.getElementById("loadDraftInput").click());
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
-        document.getElementById("loadDraftInput").addEventListener("change", (e) => {
-            const file = e.target.files && e.target.files[0];
-            if (file) importDraft(file, pendingLoadSection);
-            pendingLoadSection = null;
-            e.target.value = "";
-        });
 
         document.addEventListener("click", (event) => {
             const btn = event.target.closest("[data-section-action]");
@@ -2457,14 +2459,20 @@ Lep pozdrav
                 }
             } else if (action === "save") {
                 saveDraftToFile(sectionIndex);
-            } else if (action === "load") {
-                pendingLoadSection = sectionIndex;
-                document.getElementById("loadDraftInput").click();
             }
         });
 
         updateDocumentTitleForPdf();
         renderSurvey();
+
+        try {
+            const embeddedDraftText = document.getElementById("savedDraftData")?.textContent || "";
+            if (embeddedDraftText.trim()) {
+                applyDraft(JSON.parse(embeddedDraftText));
+            }
+        } catch {
+            console.warn("Vgrajenega osnutka ni bilo mogoče prebrati.");
+        }
 
         try {
             const backup = localStorage.getItem("VprašalnikDraftBackup");
