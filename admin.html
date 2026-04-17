@@ -1913,6 +1913,8 @@ Lep pozdrav
     <script>
         const CONFIG = ${json};
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
+        const DRAFT_SAVE_HANDLES = new Map();
+        let DRAFT_DIRECTORY_HANDLE = null;
 
         function parseUnits(value) {
             return String(value || "")
@@ -2081,12 +2083,84 @@ Lep pozdrav
             return html;
         }
 
-        function saveDraftToFile(sectionIndex = null) {
+        async function saveDraftToFile(sectionIndex = null) {
             const draft = collectDraft(sectionIndex);
             const suffix = sectionIndex == null ? "" : "-del-" + sectionIndex;
+            const fileName = "Vprašalnik-osnutek" + suffix + ".html";
             const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
-            const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
-            downloadBlob(blob, "Vprašalnik-osnutek" + suffix + ".html");
+
+            if (window.showDirectoryPicker) {
+                try {
+                    const directoryHandle = DRAFT_DIRECTORY_HANDLE || await window.showDirectoryPicker({ mode: "readwrite" });
+                    const fileHandle = await directoryHandle.getFileHandle(fileName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(htmlWithDraft);
+                    await writable.close();
+                    DRAFT_DIRECTORY_HANDLE = directoryHandle;
+                } catch (err) {
+                    if (err?.name === "AbortError") {
+                        return;
+                    }
+                    if (window.showSaveFilePicker) {
+                        try {
+                            const handleKey = sectionIndex == null ? "full" : ("section-" + Number(sectionIndex));
+                            const existingHandle = DRAFT_SAVE_HANDLES.get(handleKey);
+                            const pickerOptions = {
+                                suggestedName: fileName,
+                                types: [{
+                                    description: "HTML datoteka",
+                                    accept: {
+                                        "text/html": [".html"]
+                                    }
+                                }]
+                            };
+                            const fileHandle = existingHandle || await window.showSaveFilePicker(pickerOptions);
+                            const writable = await fileHandle.createWritable();
+                            await writable.write(htmlWithDraft);
+                            await writable.close();
+                            DRAFT_SAVE_HANDLES.set(handleKey, fileHandle);
+                        } catch (saveErr) {
+                            if (saveErr?.name === "AbortError") {
+                                return;
+                            }
+                            const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
+                            downloadBlob(blob, fileName);
+                        }
+                    } else {
+                        const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
+                        downloadBlob(blob, fileName);
+                    }
+                }
+            } else if (window.showSaveFilePicker) {
+                try {
+                    const handleKey = sectionIndex == null ? "full" : ("section-" + Number(sectionIndex));
+                    const existingHandle = DRAFT_SAVE_HANDLES.get(handleKey);
+                    const pickerOptions = {
+                        suggestedName: fileName,
+                        types: [{
+                            description: "HTML datoteka",
+                            accept: {
+                                "text/html": [".html"]
+                            }
+                        }]
+                    };
+                    const fileHandle = existingHandle || await window.showSaveFilePicker(pickerOptions);
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(htmlWithDraft);
+                    await writable.close();
+                    DRAFT_SAVE_HANDLES.set(handleKey, fileHandle);
+                } catch (err) {
+                    if (err?.name === "AbortError") {
+                        return;
+                    }
+                    const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
+                    downloadBlob(blob, fileName);
+                }
+            } else {
+                const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
+                downloadBlob(blob, fileName);
+            }
+
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
