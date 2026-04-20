@@ -423,6 +423,40 @@
             min-width: 80px;
         }
 
+        .matrix-designer {
+            margin-top: 8px;
+            max-width: 100%;
+            overflow: auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            padding: 8px;
+        }
+
+        .matrix-designer table {
+            margin-top: 0;
+        }
+
+        .matrix-designer td {
+            min-width: 80px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .matrix-designer td input[type="text"] {
+            width: 100%;
+            min-width: 72px;
+            border: 1px solid #d7deeb;
+            border-radius: 6px;
+            padding: 6px 8px;
+        }
+
+        .matrix-selected-cell {
+            outline: 2px solid #2563eb;
+            outline-offset: -2px;
+            background: #eaf1ff;
+        }
+
         .matrix-readonly-cell {
             background: #e8f1ff;
             font-weight: 600;
@@ -573,22 +607,35 @@ Lep pozdrav
                         <label for="matrixCols">Število stolpcev (B)</label>
                         <input id="matrixCols" type="text" value="7" />
 
-                        <label for="matrixPreset">Predizpolnjene celice (vrstice loči z novo vrstico, celice s podpičjem ali TAB)</label>
-                        <textarea id="matrixPreset" placeholder="Primer:
+                        <div class="btns" style="margin-top:8px;">
+                            <button id="matrixBuildBtn" type="button">Ustvari / posodobi tabelo</button>
+                            <button id="matrixMergeBtn" type="button">Merge izbranih</button>
+                            <button id="matrixSplitBtn" type="button">Razdruži (split)</button>
+                            <button id="matrixReadonlyBtn" type="button">Toggle neureljivo</button>
+                            <button id="matrixClearSelBtn" type="button">Počisti izbor</button>
+                        </div>
+                        <div id="matrixSelectionInfo" class="hint">Izbranih celic: 0</div>
+                        <div id="matrixDesigner" class="matrix-designer"></div>
+
+                        <details style="margin-top:8px;">
+                            <summary>Napredni tekstovni vnos (neobvezno)</summary>
+                            <label for="matrixPreset">Predizpolnjene celice (vrstice loči z novo vrstico, celice s podpičjem ali TAB)</label>
+                            <textarea id="matrixPreset" placeholder="Primer:
 1;2;3;4;5;6;7
 PO;TO;SR;ČE;PE;SO;NE
 ;;;;;;;"></textarea>
-                        <div class="hint">Prazne celice ostanejo namenjene anketirancu. Če je manj podatkov kot A x B, se manjkajoče celice pustijo prazne.</div>
+                            <div class="hint">Prazne celice ostanejo namenjene anketirancu. Če je manj podatkov kot A x B, se manjkajoče celice pustijo prazne.</div>
 
-                        <label for="matrixReadonly">Neureljive celice (1-based: vrstica,stolpec; loči s ; ali novo vrstico)</label>
-                        <textarea id="matrixReadonly" placeholder="Primer:
+                            <label for="matrixReadonly">Neureljive celice (1-based: vrstica,stolpec; loči s ; ali novo vrstico)</label>
+                            <textarea id="matrixReadonly" placeholder="Primer:
 1,1; 2,1"></textarea>
 
-                        <label for="matrixMerges">Združitve celic (1-based: vrstica,stolpec,rowspan,colspan; loči s ; ali novo vrstico)</label>
-                        <textarea id="matrixMerges" placeholder="Primer:
+                            <label for="matrixMerges">Združitve celic (1-based: vrstica,stolpec,rowspan,colspan; loči s ; ali novo vrstico)</label>
+                            <textarea id="matrixMerges" placeholder="Primer:
 1,1,1,2
 3,1,2,1"></textarea>
-                        <div class="hint">Združitve in neureljive celice omogočajo postavitev glave (mesec/dan) + vnos samo v namenjene celice.</div>
+                            <div class="hint">Združitve in neureljive celice omogočajo postavitev glave (mesec/dan) + vnos samo v namenjene celice.</div>
+                        </details>
                     </div>
                     <label for="qSectionId">Del ankete</label>
                     <select id="qSectionId"></select>
@@ -724,6 +771,13 @@ PO;TO;SR;ČE;PE;SO;NE
         const matrixPresetEl = document.getElementById("matrixPreset");
         const matrixReadonlyEl = document.getElementById("matrixReadonly");
         const matrixMergesEl = document.getElementById("matrixMerges");
+        const matrixDesignerEl = document.getElementById("matrixDesigner");
+        const matrixSelectionInfoEl = document.getElementById("matrixSelectionInfo");
+        const matrixBuildBtnEl = document.getElementById("matrixBuildBtn");
+        const matrixMergeBtnEl = document.getElementById("matrixMergeBtn");
+        const matrixSplitBtnEl = document.getElementById("matrixSplitBtn");
+        const matrixReadonlyBtnEl = document.getElementById("matrixReadonlyBtn");
+        const matrixClearSelBtnEl = document.getElementById("matrixClearSelBtn");
         const questionListEl = document.getElementById("questionList");
         const sectionOverviewEl = document.getElementById("sectionOverview");
         const previewContainerEl = document.getElementById("previewContainer");
@@ -733,6 +787,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
         let activeRteEl = qTextEl;
         let savedSelectionRange = null;
+        let matrixDesignerState = null;
 
 
         function setStatus(message) {
@@ -911,6 +966,264 @@ PO;TO;SR;ČE;PE;SO;NE
             return readonlySet.has(row + ":" + col);
         }
 
+        function getDefaultMatrixState(rows, cols) {
+            const safeRows = Math.max(1, parsePositiveInt(rows, 1));
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            return {
+                rows: safeRows,
+                cols: safeCols,
+                preset: Array.from({ length: safeRows }, () => Array.from({ length: safeCols }, () => "")),
+                readonly: [],
+                merges: [],
+                selected: new Set()
+            };
+        }
+
+        function getMatrixStateFromInputs() {
+            const rows = Math.max(1, parsePositiveInt(matrixRowsEl.value, 1));
+            const cols = Math.max(1, parsePositiveInt(matrixColsEl.value, 1));
+            let readonly = [];
+            let merges = [];
+            try {
+                readonly = parseMatrixReadonly(matrixReadonlyEl.value);
+            } catch {}
+            try {
+                merges = parseMatrixMerges(matrixMergesEl.value);
+            } catch {}
+
+            try {
+                const { masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+                merges = Array.from(masterMap.entries()).map(([key, span]) => {
+                    const [row, col] = key.split(":").map(Number);
+                    return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                });
+            } catch {
+                merges = [];
+            }
+
+            return {
+                rows,
+                cols,
+                preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                readonly,
+                merges,
+                selected: new Set()
+            };
+        }
+
+        function syncMatrixStateToInputs() {
+            if (!matrixDesignerState) return;
+            matrixRowsEl.value = String(matrixDesignerState.rows);
+            matrixColsEl.value = String(matrixDesignerState.cols);
+            matrixPresetEl.value = matrixToPresetText(matrixDesignerState.preset, matrixDesignerState.rows, matrixDesignerState.cols);
+            matrixReadonlyEl.value = formatMatrixReadonly(matrixDesignerState.readonly);
+            matrixMergesEl.value = formatMatrixMerges(matrixDesignerState.merges);
+        }
+
+        function resizeMatrixState(rows, cols) {
+            const safeRows = Math.max(1, parsePositiveInt(rows, 1));
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            if (!matrixDesignerState) {
+                matrixDesignerState = getDefaultMatrixState(safeRows, safeCols);
+                return;
+            }
+
+            const nextPreset = Array.from({ length: safeRows }, (_, r) =>
+                Array.from({ length: safeCols }, (_, c) => String(matrixDesignerState.preset?.[r]?.[c] || ""))
+            );
+            matrixDesignerState.rows = safeRows;
+            matrixDesignerState.cols = safeCols;
+            matrixDesignerState.preset = nextPreset;
+            matrixDesignerState.readonly = (matrixDesignerState.readonly || [])
+                .filter(cell => cell.row < safeRows && cell.col < safeCols);
+            matrixDesignerState.merges = (matrixDesignerState.merges || [])
+                .filter(merge => merge.row + merge.rowspan <= safeRows && merge.col + merge.colspan <= safeCols);
+            matrixDesignerState.selected = new Set();
+        }
+
+        function setMatrixSelection(cellKey, additive) {
+            if (!matrixDesignerState) return;
+            if (!additive) {
+                matrixDesignerState.selected.clear();
+                matrixDesignerState.selected.add(cellKey);
+                return;
+            }
+
+            if (matrixDesignerState.selected.has(cellKey)) {
+                matrixDesignerState.selected.delete(cellKey);
+            } else {
+                matrixDesignerState.selected.add(cellKey);
+            }
+        }
+
+        function matrixSelectionToCoords() {
+            if (!matrixDesignerState) return [];
+            return Array.from(matrixDesignerState.selected).map(key => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col };
+            });
+        }
+
+        function normalizeMatrixMergesInState() {
+            if (!matrixDesignerState) return;
+            const { masterMap, skipMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
+            matrixDesignerState.merges = Array.from(masterMap.entries()).map(([key, span]) => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+            });
+            matrixDesignerState.readonly = (matrixDesignerState.readonly || []).filter(cell => !skipMap.has(cell.row + ":" + cell.col));
+        }
+
+        function renderMatrixDesigner() {
+            if (!matrixDesignerEl || !matrixSelectionInfoEl) return;
+            if (!matrixDesignerState) {
+                matrixDesignerEl.innerHTML = "<div class='hint'>Najprej ustvari matriko.</div>";
+                matrixSelectionInfoEl.textContent = "Izbranih celic: 0";
+                return;
+            }
+
+            const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
+            const { skipMap, masterMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
+            const selected = matrixDesignerState.selected || new Set();
+
+            const table = document.createElement("table");
+            table.className = "matrix-table";
+            const tbody = document.createElement("tbody");
+
+            for (let row = 0; row < matrixDesignerState.rows; row += 1) {
+                const tr = document.createElement("tr");
+                for (let col = 0; col < matrixDesignerState.cols; col += 1) {
+                    const key = row + ":" + col;
+                    if (skipMap.has(key)) continue;
+
+                    const td = document.createElement("td");
+                    td.dataset.matrixRow = String(row);
+                    td.dataset.matrixCol = String(col);
+
+                    if (selected.has(key)) {
+                        td.classList.add("matrix-selected-cell");
+                    }
+                    const span = masterMap.get(key);
+                    if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                    if (span?.colspan > 1) td.colSpan = span.colspan;
+
+                    if (isMatrixCellReadonly(readonlySet, row, col)) {
+                        td.classList.add("matrix-readonly-cell");
+                    }
+
+                    td.addEventListener("click", (event) => {
+                        event.preventDefault();
+                        setMatrixSelection(key, event.ctrlKey || event.metaKey);
+                        renderMatrixDesigner();
+                    });
+
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.value = String(matrixDesignerState.preset?.[row]?.[col] || "");
+                    input.addEventListener("click", (event) => event.stopPropagation());
+                    input.addEventListener("input", () => {
+                        matrixDesignerState.preset[row][col] = input.value || "";
+                        syncMatrixStateToInputs();
+                    });
+                    td.appendChild(input);
+
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+
+            table.appendChild(tbody);
+            matrixDesignerEl.innerHTML = "";
+            matrixDesignerEl.appendChild(table);
+            matrixSelectionInfoEl.textContent = `Izbranih celic: ${selected.size}`;
+            syncMatrixStateToInputs();
+        }
+
+        function buildMatrixDesignerFromInputs() {
+            try {
+                const fromInputs = getMatrixStateFromInputs();
+                matrixDesignerState = {
+                    ...fromInputs,
+                    selected: new Set()
+                };
+                renderMatrixDesigner();
+            } catch (err) {
+                setStatus(err.message || "Napaka pri pripravi matrike.");
+            }
+        }
+
+        function mergeSelectedMatrixCells() {
+            if (!matrixDesignerState) return;
+            const coords = matrixSelectionToCoords();
+            if (coords.length < 2) {
+                setStatus("Za merge izberi vsaj 2 celici.");
+                return;
+            }
+
+            const rows = coords.map(c => c.row);
+            const cols = coords.map(c => c.col);
+            const minRow = Math.min(...rows);
+            const maxRow = Math.max(...rows);
+            const minCol = Math.min(...cols);
+            const maxCol = Math.max(...cols);
+            const needed = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+            if (needed !== coords.length) {
+                setStatus("Merge zahteva pravokoten izbor celic.");
+                return;
+            }
+
+            const currentMasters = new Set((matrixDesignerState.merges || []).map(m => m.row + ":" + m.col));
+            for (const c of coords) {
+                if (currentMasters.has(c.row + ":" + c.col)) {
+                    setStatus("Najprej razdruži obstoječe merge celice v izbranem območju.");
+                    return;
+                }
+            }
+
+            const merge = { row: minRow, col: minCol, rowspan: maxRow - minRow + 1, colspan: maxCol - minCol + 1 };
+            matrixDesignerState.merges.push(merge);
+            try {
+                normalizeMatrixMergesInState();
+                matrixDesignerState.selected = new Set([minRow + ":" + minCol]);
+                renderMatrixDesigner();
+            } catch (err) {
+                matrixDesignerState.merges.pop();
+                setStatus(err.message || "Merge ni uspel.");
+            }
+        }
+
+        function splitSelectedMatrixCells() {
+            if (!matrixDesignerState) return;
+            const selected = matrixDesignerState.selected || new Set();
+            const before = matrixDesignerState.merges.length;
+            matrixDesignerState.merges = matrixDesignerState.merges.filter(m => !selected.has(m.row + ":" + m.col));
+            matrixDesignerState.selected = new Set();
+            if (before === matrixDesignerState.merges.length) {
+                setStatus("Izberi začetno (zgoraj-levo) merge celico za razdružitev.");
+            }
+            renderMatrixDesigner();
+        }
+
+        function toggleReadonlySelectedCells() {
+            if (!matrixDesignerState) return;
+            const selected = matrixSelectionToCoords();
+            if (selected.length === 0) {
+                setStatus("Najprej izberi celice.");
+                return;
+            }
+            const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
+            selected.forEach((c) => {
+                const key = c.row + ":" + c.col;
+                if (readonlySet.has(key)) readonlySet.delete(key);
+                else readonlySet.add(key);
+            });
+            matrixDesignerState.readonly = Array.from(readonlySet).map(key => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col };
+            });
+            renderMatrixDesigner();
+        }
+
         function parseUnits(value) {
             return String(value || "")
                 .split(/[\n,;]+/)
@@ -1010,11 +1323,13 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixPresetEl.value = "";
             matrixReadonlyEl.value = "";
             matrixMergesEl.value = "";
+            matrixDesignerState = null;
             childFieldsEl.classList.add("hidden");
             document.getElementById("saveQuestionBtn").textContent = "Dodaj vprašanje";
             document.getElementById("questionImage").value = "";
             document.getElementById("childImage").value = "";
             updateQuestionTypeUI();
+            renderMatrixDesigner();
             renderUnitCheckboxes([]);
             renderQuestionSectionOptions();
         }
@@ -1101,6 +1416,14 @@ PO;TO;SR;ČE;PE;SO;NE
             } else {
                 childFieldsEl.classList.toggle("hidden", !hasChildEl.checked);
             }
+
+            if (isMatrix) {
+                if (!matrixDesignerState) {
+                    buildMatrixDesignerFromInputs();
+                } else {
+                    renderMatrixDesigner();
+                }
+            }
         }
 
         rteEditors.forEach(editorEl => {
@@ -1170,6 +1493,9 @@ PO;TO;SR;ČE;PE;SO;NE
             }
 
             if (qTypeEl.value === "matrix_table") {
+                if (matrixDesignerState) {
+                    syncMatrixStateToInputs();
+                }
                 const rows = parsePositiveInt(matrixRowsEl.value, NaN);
                 const cols = parsePositiveInt(matrixColsEl.value, NaN);
                 if (!Number.isFinite(rows) || !Number.isFinite(cols)) {
@@ -1281,6 +1607,7 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixPresetEl.value = matrixToPresetText(q.matrix?.preset, q.matrix?.rows || 3, q.matrix?.cols || 7);
             matrixReadonlyEl.value = formatMatrixReadonly(q.matrix?.readonly);
             matrixMergesEl.value = formatMatrixMerges(q.matrix?.merges);
+            buildMatrixDesignerFromInputs();
             document.getElementById("questionImage").value = "";
             document.getElementById("childImage").value = "";
 
@@ -1484,7 +1811,13 @@ PO;TO;SR;ČE;PE;SO;NE
             const preset = parseMatrixPreset(matrixToPresetText(matrix?.preset, rows, cols), rows, cols);
             const merges = Array.isArray(matrix?.merges) ? matrix.merges : [];
             const readonlySet = new Set((Array.isArray(matrix?.readonly) ? matrix.readonly : []).map(c => `${c.row}:${c.col}`));
-            const { skipMap, masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+            let skipMap = new Set();
+            let masterMap = new Map();
+            try {
+                const mergeIndex = buildMatrixMergeIndex(rows, cols, merges);
+                skipMap = mergeIndex.skipMap;
+                masterMap = mergeIndex.masterMap;
+            } catch {}
 
             let html = "<table><tbody>";
             for (let row = 0; row < rows; row += 1) {
@@ -3047,6 +3380,20 @@ PO;TO;SR;ČE;PE;SO;NE
         on(hasChildEl, "input", updateQuestionTypeUI);
         on(qTypeEl, "change", updateQuestionTypeUI);
         on(childTypeEl, "change", updateChildTypeUI);
+        on(matrixBuildBtnEl, "click", () => {
+            resizeMatrixState(matrixRowsEl.value, matrixColsEl.value);
+            renderMatrixDesigner();
+            setStatus("Matrika posodobljena.");
+        });
+        on(matrixMergeBtnEl, "click", mergeSelectedMatrixCells);
+        on(matrixSplitBtnEl, "click", splitSelectedMatrixCells);
+        on(matrixReadonlyBtnEl, "click", toggleReadonlySelectedCells);
+        on(matrixClearSelBtnEl, "click", () => {
+            if (matrixDesignerState) {
+                matrixDesignerState.selected = new Set();
+                renderMatrixDesigner();
+            }
+        });
 
         on(surveyPeriodEl, "input", renderPreview);
         on(surveyTitleEl, "input", renderPreview);
@@ -3055,6 +3402,15 @@ PO;TO;SR;ČE;PE;SO;NE
         on(surveyEmailSubjectEl, "input", renderPreview);
         on(surveyEmailMessageEl, "input", renderPreview);
         on(surveyPdfFileNameEl, "input", renderPreview);
+        on(matrixPresetEl, "input", () => {
+            if (qTypeEl.value === "matrix_table") buildMatrixDesignerFromInputs();
+        });
+        on(matrixReadonlyEl, "input", () => {
+            if (qTypeEl.value === "matrix_table") buildMatrixDesignerFromInputs();
+        });
+        on(matrixMergesEl, "input", () => {
+            if (qTypeEl.value === "matrix_table") buildMatrixDesignerFromInputs();
+        });
         on(unitOptionsEl, "input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
