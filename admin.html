@@ -503,6 +503,12 @@
             table-layout: fixed;
         }
 
+        .matrix-scroll {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
         .matrix-table th,
         .matrix-table td {
             border: 1px solid #d0d7de !important;
@@ -712,7 +718,7 @@ Lep pozdrav
                             <div class="hint">Izberi mesece (npr. oktober 2026, november 2026) in sistem pripravi vrstice: mesec, dan, dan v tednu, konfiguracija.</div>
                         </div>
                         <input id="matrixCsvInput" type="file" accept=".csv,text/csv" class="hidden" />
-                        <div class="hint">DSL oznake v <strong>Predizpolnjene celice</strong>: <code>[m=N]</code> colspan, <code>[ro]</code> readonly, <code>[b]</code> bold, <code>[c]</code>/<code>[l]</code>/<code>[r]</code> poravnava, <code>[fs=N]</code> velikost pisave.</div>
+                        <div class="hint">DSL oznake v <strong>Predizpolnjene celice</strong>: <code>[m=N]</code> colspan, <code>[ro]</code> readonly, <code>[b]</code> bold (samo ta celica), <code>[c]</code>/<code>[l]</code>/<code>[r]</code> poravnava, <code>[fs=N]</code> velikost pisave.</div>
                         <div id="matrixDesigner" class="matrix-designer"></div>
 
                         <details style="margin-top:8px;">
@@ -999,12 +1005,12 @@ PO;TO;SR;ČE;PE;SO;NE
             const lines = String(value || "").split(/\r?\n/);
 
             for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-                const cells = String(lines[rowIndex] || "").split(";");
+                const cells = String(lines[rowIndex] || "").split(/[;\t]/);
                 let colIndex = 0;
 
                 for (const rawCell of cells) {
                     if (colIndex >= cols) break;
-                    let remaining = rawCell || "";
+                    let remaining = String(rawCell || "").trimStart();
                     const style = {};
                     let colspan = 1;
                     let isReadonly = false;
@@ -1502,6 +1508,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
             const table = document.createElement("table");
             table.className = "matrix-table";
+            table.style.minWidth = Math.max(640, (matrixDesignerState.cols + 1) * 42) + "px";
             const tbody = document.createElement("tbody");
             const colgroup = document.createElement("colgroup");
             const normalizedWidths = normalizeColumnWidths(matrixDesignerState.colWidths || [], matrixDesignerState.cols);
@@ -2274,7 +2281,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 masterMap = mergeIndex.masterMap;
             } catch {}
 
-            let html = "<table class=\"matrix-table\"><colgroup>" +
+            const minTableWidth = Math.max(640, (cols + 1) * 42);
+            let html = `<div class="matrix-scroll"><table class="matrix-table" style="min-width:${minTableWidth}px;"><colgroup>` +
                 colWidths.map(width => `<col style=\"width:${width}%;\" />`).join("") +
                 "</colgroup><tbody>";
             for (let row = 0; row < rows; row += 1) {
@@ -2302,7 +2310,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
                 html += "</tr>";
             }
-            html += "</tbody></table>";
+            html += "</tbody></table></div>";
             return html;
         }
 
@@ -2831,6 +2839,12 @@ PO;TO;SR;ČE;PE;SO;NE
             margin-top: 0;
             width: 100%;
             table-layout: fixed;
+        }
+
+        .matrix-scroll {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: hidden;
         }
 
         .matrix-table th,
@@ -3642,12 +3656,15 @@ PO;TO;SR;ČE;PE;SO;NE
                     textarea.placeholder = "Vpiši odgovor...";
                     card.appendChild(textarea);
                 } else if (q.type === "matrix_table") {
+                    const matrixScroll = document.createElement("div");
+                    matrixScroll.className = "matrix-scroll";
                     const matrixTable = document.createElement("table");
                     matrixTable.className = "matrix-table";
                     const tbody = document.createElement("tbody");
 
                     const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                    matrixTable.style.minWidth = Math.max(640, (cols + 1) * 42) + "px";
                     const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
                     const colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], cols);
                     const styles = q.matrix && typeof q.matrix.styles === "object" && q.matrix.styles !== null ? q.matrix.styles : {};
@@ -3726,7 +3743,8 @@ PO;TO;SR;ČE;PE;SO;NE
                     }
 
                     matrixTable.appendChild(tbody);
-                    card.appendChild(matrixTable);
+                    matrixScroll.appendChild(matrixTable);
+                    card.appendChild(matrixScroll);
 
                     const copyBtn = document.createElement("button");
                     copyBtn.type = "button";
