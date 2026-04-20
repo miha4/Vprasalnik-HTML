@@ -3129,7 +3129,9 @@ PO;TO;SR;ČE;PE;SO;NE
             const selectedUnit = unitSelect.value;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
-            const sections = RUNTIME_CONFIG.sections;
+            const sections = Array.isArray(RUNTIME_CONFIG.sections) && RUNTIME_CONFIG.sections.length
+                ? RUNTIME_CONFIG.sections
+                : [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }];
             const sectionIdSet = new Set(sections.map(section => section.id));
             container.innerHTML = "";
 
@@ -3156,6 +3158,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const targetSectionId = sectionIdSet.has(q.sectionId) ? q.sectionId : sections[0].id;
                     return targetSectionId === section.id;
                 }).forEach((q) => {
+                try {
                 questionIndex += 1;
 
                 const showQuestionNumber = q.type !== "text_block";
@@ -3384,6 +3387,9 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
 
                 questionsWrap.appendChild(card);
+                } catch (err) {
+                    console.error("Napaka pri prikazu vprašanja:", err, q);
+                }
                 });
 
                 sectionShell.appendChild(questionsWrap);
