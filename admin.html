@@ -693,6 +693,9 @@ Lep pozdrav
                         <label for="matrixCols">Število stolpcev (B)</label>
                         <input id="matrixCols" type="text" value="7" />
 
+                        <label for="matrixColWidths">Širine stolpcev (neobvezno, npr. 120;60;60;60)</label>
+                        <input id="matrixColWidths" type="text" placeholder="Če prazno, so vsi stolpci enaki." />
+
                         <div class="btns" style="margin-top:8px;">
                             <button id="matrixBuildBtn" type="button">Ustvari / posodobi tabelo</button>
                             <button id="matrixCsvImportBtn" type="button">Uvozi CSV</button>
@@ -856,6 +859,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const matrixFieldsEl = document.getElementById("matrixFields");
         const matrixRowsEl = document.getElementById("matrixRows");
         const matrixColsEl = document.getElementById("matrixCols");
+        const matrixColWidthsEl = document.getElementById("matrixColWidths");
         const matrixPresetEl = document.getElementById("matrixPreset");
         const matrixReadonlyEl = document.getElementById("matrixReadonly");
         const matrixMergesEl = document.getElementById("matrixMerges");
@@ -971,6 +975,75 @@ PO;TO;SR;ČE;PE;SO;NE
                 matrix.push(row);
             }
             return matrix;
+        }
+
+        function parseMatrixColumnWidths(value, cols) {
+            const tokens = String(value || "")
+                .split(";")
+                .map(x => Number(x.trim()))
+                .filter(v => Number.isFinite(v) && v > 0);
+            if (!tokens.length) return getDefaultColumnWidths(cols);
+            return normalizeColumnWidths(tokens, cols);
+        }
+
+        function parseMatrixDslPreset(value, rows, cols) {
+            const matrix = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+            const merges = [];
+            const readonly = [];
+            const styles = {};
+            const lines = String(value || "").split(/\r?\n/);
+
+            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                const cells = String(lines[rowIndex] || "").split(";");
+                let colIndex = 0;
+
+                for (const rawCell of cells) {
+                    if (colIndex >= cols) break;
+                    let remaining = rawCell || "";
+                    const style = {};
+                    let colspan = 1;
+                    let isReadonly = false;
+
+                    while (remaining.startsWith("[")) {
+                        const end = remaining.indexOf("]");
+                        if (end < 0) break;
+                        const tag = remaining.slice(1, end).trim();
+                        remaining = remaining.slice(end + 1);
+
+                        tag.split("|").map(x => x.trim()).filter(Boolean).forEach((token) => {
+                            if (token === "ro") isReadonly = true;
+                            else if (token === "b") style.bold = true;
+                            else if (token === "c") style.align = "center";
+                            else if (token === "l") style.align = "left";
+                            else if (token === "r") style.align = "right";
+                            else if (token.startsWith("fs=")) {
+                                const fs = Number.parseInt(token.slice(3), 10);
+                                if (Number.isFinite(fs) && fs > 0) style.fontSize = fs;
+                            } else if (token.startsWith("m=")) {
+                                const m = Number.parseInt(token.slice(2), 10);
+                                if (Number.isFinite(m) && m > 0) colspan = m;
+                            }
+                        });
+                    }
+
+                    colspan = Math.max(1, Math.min(colspan, cols - colIndex));
+                    matrix[rowIndex][colIndex] = remaining.trim();
+
+                    if (colspan > 1) {
+                        merges.push({ row: rowIndex, col: colIndex, rowspan: 1, colspan });
+                    }
+                    if (isReadonly) {
+                        readonly.push({ row: rowIndex, col: colIndex });
+                    }
+                    if (Object.keys(style).length > 0) {
+                        styles[rowIndex + ":" + colIndex] = style;
+                    }
+
+                    colIndex += colspan;
+                }
+            }
+
+            return { preset: matrix, merges, readonly, styles };
         }
 
         function matrixToPresetText(matrix, rows, cols) {
@@ -1131,6 +1204,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 cols: safeCols,
                 preset: Array.from({ length: safeRows }, () => Array.from({ length: safeCols }, () => "")),
                 colWidths: getDefaultColumnWidths(safeCols),
+                styles: {},
                 readonly: [],
                 merges: [],
                 selected: new Set()
@@ -1163,7 +1237,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 rows,
                 cols,
                 preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
-                colWidths: normalizeColumnWidths(matrixDesignerState?.colWidths || [], cols),
+                colWidths: parseMatrixColumnWidths(matrixColWidthsEl.value, cols),
+                styles: {},
                 readonly,
                 merges,
                 selected: new Set()
@@ -1174,6 +1249,7 @@ PO;TO;SR;ČE;PE;SO;NE
             if (!matrixDesignerState) return;
             matrixRowsEl.value = String(matrixDesignerState.rows);
             matrixColsEl.value = String(matrixDesignerState.cols);
+            matrixColWidthsEl.value = (matrixDesignerState.colWidths || []).map(w => Math.round(w * 100) / 100).join(";");
             matrixPresetEl.value = matrixToPresetText(matrixDesignerState.preset, matrixDesignerState.rows, matrixDesignerState.cols);
             matrixReadonlyEl.value = formatMatrixReadonly(matrixDesignerState.readonly);
             matrixMergesEl.value = formatMatrixMerges(matrixDesignerState.merges);
@@ -1403,6 +1479,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 cols: safeCols,
                 preset: parsed.preset.slice(0, safeRows).map(row => row.slice(0, safeCols)),
                 colWidths: getDefaultColumnWidths(safeCols),
+                styles: {},
                 readonly: [],
                 merges: [],
                 selected: new Set()
@@ -1583,6 +1660,7 @@ PO;TO;SR;ČE;PE;SO;NE
             childColumnsEl.value = "";
             matrixRowsEl.value = "3";
             matrixColsEl.value = "7";
+            matrixColWidthsEl.value = "";
             matrixPresetEl.value = "";
             matrixReadonlyEl.value = "";
             matrixMergesEl.value = "";
@@ -1771,8 +1849,11 @@ PO;TO;SR;ČE;PE;SO;NE
 
                 const merges = parseMatrixMerges(matrixMergesEl.value);
                 const readonly = parseMatrixReadonly(matrixReadonlyEl.value);
-                const { skipMap, masterMap } = buildMatrixMergeIndex(rows, cols, merges);
-                readonly.forEach((cell) => {
+                const dslParsed = parseMatrixDslPreset(matrixPresetEl.value, rows, cols);
+                const combinedMerges = [...merges, ...dslParsed.merges];
+                const combinedReadonly = [...readonly, ...dslParsed.readonly];
+                const { skipMap, masterMap } = buildMatrixMergeIndex(rows, cols, combinedMerges);
+                combinedReadonly.forEach((cell) => {
                     const key = cell.row + ":" + cell.col;
                     if (cell.row < 0 || cell.col < 0 || cell.row >= rows || cell.col >= cols) {
                         throw new Error("Neureljiva celica je izven meja matrike.");
@@ -1785,13 +1866,14 @@ PO;TO;SR;ČE;PE;SO;NE
                 question.matrix = {
                     rows,
                     cols,
-                    preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
-                    colWidths: normalizeColumnWidths(matrixDesignerState?.colWidths || [], cols),
-                    readonly,
+                    preset: dslParsed.preset,
+                    colWidths: parseMatrixColumnWidths(matrixColWidthsEl.value, cols),
+                    readonly: Array.from(new Map(combinedReadonly.map(cell => [cell.row + ":" + cell.col, cell])).values()),
                     merges: Array.from(masterMap.entries()).map(([key, span]) => {
                         const [row, col] = key.split(":").map(Number);
                         return { row, col, rowspan: span.rowspan, colspan: span.colspan };
-                    })
+                    }),
+                    styles: dslParsed.styles
                 };
             }
 
@@ -1869,6 +1951,7 @@ PO;TO;SR;ČE;PE;SO;NE
             childColumnsEl.value = q.child?.type === "text" ? "" : (q.child?.columns || []).join("; ");
             matrixRowsEl.value = String(q.matrix?.rows || 3);
             matrixColsEl.value = String(q.matrix?.cols || 7);
+            matrixColWidthsEl.value = (q.matrix?.colWidths || []).map(w => Math.round(Number(w) * 100) / 100).join(";");
             matrixPresetEl.value = matrixToPresetText(q.matrix?.preset, q.matrix?.rows || 3, q.matrix?.cols || 7);
             matrixReadonlyEl.value = formatMatrixReadonly(q.matrix?.readonly);
             matrixMergesEl.value = formatMatrixMerges(q.matrix?.merges);
@@ -2080,6 +2163,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const preset = parseMatrixPreset(matrixToPresetText(matrix?.preset, rows, cols), rows, cols);
             const merges = Array.isArray(matrix?.merges) ? matrix.merges : [];
             const colWidths = normalizeColumnWidths(matrix?.colWidths || [], cols);
+            const styles = matrix && typeof matrix.styles === "object" && matrix.styles !== null ? matrix.styles : {};
             const readonlySet = new Set((Array.isArray(matrix?.readonly) ? matrix.readonly : []).map(c => `${c.row}:${c.col}`));
             let skipMap = new Set();
             let masterMap = new Map();
@@ -2102,11 +2186,17 @@ PO;TO;SR;ČE;PE;SO;NE
                     const rowspanAttr = span?.rowspan > 1 ? ` rowspan="${span.rowspan}"` : "";
                     const colspanAttr = span?.colspan > 1 ? ` colspan="${span.colspan}"` : "";
                     const value = String(preset[row]?.[col] || "");
+                    const cellStyle = styles[key] || {};
+                    const styleParts = [];
+                    if (cellStyle.align) styleParts.push(`text-align:${escapeHtml(cellStyle.align)}`);
+                    if (cellStyle.bold) styleParts.push("font-weight:700");
+                    if (cellStyle.fontSize) styleParts.push(`font-size:${escapeHtml(String(cellStyle.fontSize))}px`);
+                    const styleAttr = styleParts.length ? ` style="${styleParts.join(";")}"` : "";
 
                     if (readonlySet.has(key)) {
-                        html += `<td class="matrix-readonly-cell"${rowspanAttr}${colspanAttr}><div class="preserve-wrap">${escapeHtml(value || " ")}</div></td>`;
+                        html += `<td class="matrix-readonly-cell"${rowspanAttr}${colspanAttr}><div class="preserve-wrap"${styleAttr}>${escapeHtml(value || " ")}</div></td>`;
                     } else {
-                        html += `<td${rowspanAttr}${colspanAttr}><input type="text" value="${escapeHtml(value)}" /></td>`;
+                        html += `<td${rowspanAttr}${colspanAttr}><input type="text" value="${escapeHtml(value)}"${styleAttr} /></td>`;
                     }
                 }
                 html += "</tr>";
@@ -2400,7 +2490,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 merges: Array.from(mergeIndex.masterMap.entries()).map(([key, span]) => {
                     const [row, col] = key.split(":").map(Number);
                     return { row, col, rowspan: span.rowspan, colspan: span.colspan };
-                })
+                }),
+                styles: matrix && typeof matrix.styles === "object" && matrix.styles !== null ? matrix.styles : {}
             };
         }
 
@@ -3456,6 +3547,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                     const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
                     const colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], cols);
+                    const styles = q.matrix && typeof q.matrix.styles === "object" && q.matrix.styles !== null ? q.matrix.styles : {};
                     const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
                     const readonlySet = new Set((Array.isArray(q.matrix?.readonly) ? q.matrix.readonly : []).map(c => c.row + ":" + c.col));
                     const mergeIndex = (() => {
@@ -3502,11 +3594,15 @@ PO;TO;SR;ČE;PE;SO;NE
                             if (span?.colspan > 1) td.colSpan = span.colspan;
 
                             const value = sourceRow[colIndex] || "";
+                            const styleMeta = styles[cellKey] || {};
                             if (readonlySet.has(cellKey)) {
                                 td.classList.add("matrix-readonly-cell");
                                 const text = document.createElement("div");
                                 text.className = "preserve-wrap";
                                 text.textContent = value;
+                                if (styleMeta.align) text.style.textAlign = styleMeta.align;
+                                if (styleMeta.bold) text.style.fontWeight = "700";
+                                if (styleMeta.fontSize) text.style.fontSize = String(styleMeta.fontSize) + "px";
                                 text.dataset.cellRow = String(rowIndex);
                                 text.dataset.cellCol = String(colIndex);
                                 td.appendChild(text);
@@ -3514,6 +3610,9 @@ PO;TO;SR;ČE;PE;SO;NE
                                 const input = document.createElement("input");
                                 input.type = "text";
                                 input.value = value;
+                                if (styleMeta.align) input.style.textAlign = styleMeta.align;
+                                if (styleMeta.bold) input.style.fontWeight = "700";
+                                if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
                                 input.dataset.cellRow = String(rowIndex);
                                 input.dataset.cellCol = String(colIndex);
                                 td.appendChild(input);
