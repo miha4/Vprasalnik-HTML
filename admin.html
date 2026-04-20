@@ -474,11 +474,12 @@
         }
 
         .matrix-table input[type="text"] {
-            min-width: 80px;
+            min-width: 56px;
             border: 0;
             border-radius: 0;
-            padding: 6px 8px;
+            padding: 4px 6px;
             background: transparent;
+            font-size: 12px;
         }
 
         .matrix-designer {
@@ -507,6 +508,7 @@
             border: 1px solid #d0d7de !important;
             padding: 0;
             background: #fff;
+            font-size: 12px;
         }
 
         .matrix-designer td {
@@ -702,7 +704,7 @@ Lep pozdrav
                         </div>
                         <div style="margin-top:8px; border:1px solid #dbe2ea; border-radius:10px; padding:10px; background:#f8fbff;">
                             <label for="matrixMonthCount" style="margin-top:0;">Samodejna mesečna matrika</label>
-                            <input id="matrixMonthCount" type="text" value="1" placeholder="Npr. 3" />
+                            <input id="matrixMonthCount" type="number" value="1" min="1" max="12" step="1" placeholder="Npr. 3" />
                             <div id="matrixMonthsPickerWrap" class="grid two" style="margin-top:6px;"></div>
                             <div class="btns" style="margin-top:8px;">
                                 <button id="matrixGenerateCalendarBtn" type="button">Ustvari mesečni koledar</button>
@@ -1069,7 +1071,10 @@ PO;TO;SR;ČE;PE;SO;NE
 
         function renderMatrixMonthPickers() {
             if (!matrixMonthsPickerWrapEl || !matrixMonthCountEl) return;
-            const count = Math.max(1, Math.min(12, parsePositiveInt(matrixMonthCountEl.value, 1)));
+            const parsedCount = Number.parseInt(String(matrixMonthCountEl.value || "").trim(), 10);
+            const count = Number.isFinite(parsedCount)
+                ? Math.max(1, Math.min(12, parsedCount))
+                : 1;
             matrixMonthCountEl.value = String(count);
             const currentValues = Array.from(matrixMonthsPickerWrapEl.querySelectorAll('input[type="month"]')).map(input => input.value);
             matrixMonthsPickerWrapEl.innerHTML = "";
@@ -1176,7 +1181,7 @@ PO;TO;SR;ČE;PE;SO;NE
             });
 
             const dedupReadonly = Array.from(new Map(readonly.map(cell => [`${cell.row}:${cell.col}`, cell])).values());
-            const widths = cols > 1 ? [12, ...Array.from({ length: cols - 1 }, () => 88 / (cols - 1))] : [100];
+            const widths = cols > 1 ? [8, ...Array.from({ length: cols - 1 }, () => 92 / (cols - 1))] : [100];
 
             return {
                 rows,
@@ -2813,11 +2818,12 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         .matrix-table input[type="text"] {
-            min-width: 80px;
+            min-width: 56px;
             border: 0;
             border-radius: 0;
-            padding: 6px 8px;
+            padding: 4px 6px;
             background: transparent;
+            font-size: 12px;
         }
 
         .matrix-table {
@@ -2832,6 +2838,7 @@ PO;TO;SR;ČE;PE;SO;NE
             border: 1px solid #d0d7de !important;
             padding: 0;
             background: #fff;
+            font-size: 12px;
         }
 
         .matrix-readonly-cell {
@@ -3971,7 +3978,7 @@ PO;TO;SR;ČE;PE;SO;NE
             }
             if (event?.target) event.target.value = "";
         });
-        on(matrixMonthCountEl, "input", renderMatrixMonthPickers);
+        on(matrixMonthCountEl, "change", renderMatrixMonthPickers);
         on(matrixGenerateCalendarBtnEl, "click", generateCalendarMatrixFromInputs);
         on(surveyPeriodEl, "input", renderPreview);
         on(surveyTitleEl, "input", renderPreview);
