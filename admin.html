@@ -419,6 +419,49 @@
             margin-top: 10px;
         }
 
+        .matrix-table input[type="text"] {
+            min-width: 80px;
+        }
+
+        .matrix-designer {
+            margin-top: 8px;
+            max-width: 100%;
+            overflow: auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 10px;
+            background: #fff;
+            padding: 8px;
+        }
+
+        .matrix-designer table {
+            margin-top: 0;
+        }
+
+        .matrix-designer td {
+            min-width: 80px;
+            cursor: pointer;
+            position: relative;
+        }
+
+        .matrix-designer td input[type="text"] {
+            width: 100%;
+            min-width: 72px;
+            border: 1px solid #d7deeb;
+            border-radius: 6px;
+            padding: 6px 8px;
+        }
+
+        .matrix-selected-cell {
+            outline: 2px solid #2563eb;
+            outline-offset: -2px;
+            background: #eaf1ff;
+        }
+
+        .matrix-readonly-cell {
+            background: #e8f1ff;
+            font-weight: 600;
+        }
+
         th, td {
             border: 1px solid #cfd8e3;
             padding: 8px;
@@ -537,7 +580,46 @@ Lep pozdrav
                         <option value="yesno">DA / NE</option>
                         <option value="text_long">Tekstovni odgovor</option>
                         <option value="text_block">Dodaj tekstovno okno</option>
+                        <option value="matrix_table">Matrika (A x B)</option>
                     </select>
+
+                    <div id="matrixFields" class="hidden">
+                        <label for="matrixRows">Število vrstic (A)</label>
+                        <input id="matrixRows" type="text" value="3" />
+
+                        <label for="matrixCols">Število stolpcev (B)</label>
+                        <input id="matrixCols" type="text" value="7" />
+
+                        <div class="btns" style="margin-top:8px;">
+                            <button id="matrixBuildBtn" type="button">Ustvari / posodobi tabelo</button>
+                            <button id="matrixMergeBtn" type="button">Merge izbranih</button>
+                            <button id="matrixSplitBtn" type="button">Razdruži (split)</button>
+                            <button id="matrixReadonlyBtn" type="button">Toggle neureljivo</button>
+                            <button id="matrixClearSelBtn" type="button">Počisti izbor</button>
+                        </div>
+                        <div id="matrixSelectionInfo" class="hint">Izbranih celic: 0</div>
+                        <div id="matrixDesigner" class="matrix-designer"></div>
+
+                        <details style="margin-top:8px;">
+                            <summary>Napredni tekstovni vnos (neobvezno)</summary>
+                            <label for="matrixPreset">Predizpolnjene celice (vrstice loči z novo vrstico, celice s podpičjem ali TAB)</label>
+                            <textarea id="matrixPreset" placeholder="Primer:
+1;2;3;4;5;6;7
+PO;TO;SR;ČE;PE;SO;NE
+;;;;;;;"></textarea>
+                            <div class="hint">Prazne celice ostanejo namenjene anketirancu. Če je manj podatkov kot A x B, se manjkajoče celice pustijo prazne.</div>
+
+                            <label for="matrixReadonly">Neureljive celice (1-based: vrstica,stolpec; loči s ; ali novo vrstico)</label>
+                            <textarea id="matrixReadonly" placeholder="Primer:
+1,1; 2,1"></textarea>
+
+                            <label for="matrixMerges">Združitve celic (1-based: vrstica,stolpec,rowspan,colspan; loči s ; ali novo vrstico)</label>
+                            <textarea id="matrixMerges" placeholder="Primer:
+1,1,1,2
+3,1,2,1"></textarea>
+                            <div class="hint">Združitve in neureljive celice omogočajo postavitev glave (mesec/dan) + vnos samo v namenjene celice.</div>
+                        </details>
+                    </div>
                     <label for="qSectionId">Del ankete</label>
                     <select id="qSectionId"></select>
                     <label>Za katere enote velja vprašanje? (neobvezno)</label>
@@ -682,6 +764,19 @@ Lep pozdrav
         const childTextEl = document.getElementById("childText");
         const childColumnsEl = document.getElementById("childColumns");
         const childColumnsWrapEl = document.getElementById("childColumnsWrap");
+        const matrixFieldsEl = document.getElementById("matrixFields");
+        const matrixRowsEl = document.getElementById("matrixRows");
+        const matrixColsEl = document.getElementById("matrixCols");
+        const matrixPresetEl = document.getElementById("matrixPreset");
+        const matrixReadonlyEl = document.getElementById("matrixReadonly");
+        const matrixMergesEl = document.getElementById("matrixMerges");
+        const matrixDesignerEl = document.getElementById("matrixDesigner");
+        const matrixSelectionInfoEl = document.getElementById("matrixSelectionInfo");
+        const matrixBuildBtnEl = document.getElementById("matrixBuildBtn");
+        const matrixMergeBtnEl = document.getElementById("matrixMergeBtn");
+        const matrixSplitBtnEl = document.getElementById("matrixSplitBtn");
+        const matrixReadonlyBtnEl = document.getElementById("matrixReadonlyBtn");
+        const matrixClearSelBtnEl = document.getElementById("matrixClearSelBtn");
         const questionListEl = document.getElementById("questionList");
         const sectionOverviewEl = document.getElementById("sectionOverview");
         const previewContainerEl = document.getElementById("previewContainer");
@@ -691,6 +786,7 @@ Lep pozdrav
 
         let activeRteEl = qTextEl;
         let savedSelectionRange = null;
+        let matrixDesignerState = null;
 
 
         function setStatus(message) {
@@ -738,6 +834,393 @@ Lep pozdrav
                 .split(";")
                 .map(x => x.trim())
                 .filter(Boolean);
+        }
+
+        function parsePositiveInt(value, fallback) {
+            const parsed = Number.parseInt(String(value || "").trim(), 10);
+            if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+            return parsed;
+        }
+
+        function parseMatrixPreset(value, rows, cols) {
+            const lines = String(value || "")
+                .split(/\r?\n/)
+                .map(line => line.trim());
+
+            const matrix = [];
+            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                const line = lines[rowIndex] || "";
+                const cells = line
+                    ? line.split(/[;\t]/).map(cell => cell.trim())
+                    : [];
+
+                const row = [];
+                for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                    row.push(cells[colIndex] || "");
+                }
+                matrix.push(row);
+            }
+            return matrix;
+        }
+
+        function matrixToPresetText(matrix, rows, cols) {
+            const safeRows = parsePositiveInt(rows, 1);
+            const safeCols = parsePositiveInt(cols, 1);
+            const normalized = Array.isArray(matrix) ? matrix : [];
+
+            return Array.from({ length: safeRows }, (_, rowIndex) => {
+                const row = Array.isArray(normalized[rowIndex]) ? normalized[rowIndex] : [];
+                return Array.from({ length: safeCols }, (_, colIndex) => String(row[colIndex] || "")).join(";");
+            }).join("\n");
+        }
+
+        function splitCoordinateTokens(value) {
+            return String(value || "")
+                .split(/[\n;]+/)
+                .map(token => token.trim())
+                .filter(Boolean);
+        }
+
+        function parseMatrixReadonly(value) {
+            const coords = splitCoordinateTokens(value).map(token => {
+                const parts = token.split(",").map(x => Number.parseInt(x.trim(), 10));
+                if (parts.length !== 2 || parts.some(n => !Number.isFinite(n) || n <= 0)) {
+                    throw new Error("Neveljaven zapis neureljive celice. Uporabi obliko vrstica,stolpec.");
+                }
+                return { row: parts[0] - 1, col: parts[1] - 1 };
+            });
+
+            const unique = new Map();
+            coords.forEach(c => unique.set(c.row + ":" + c.col, c));
+            return Array.from(unique.values());
+        }
+
+        function parseMatrixMerges(value) {
+            const merges = splitCoordinateTokens(value).map(token => {
+                const parts = token.split(",").map(x => Number.parseInt(x.trim(), 10));
+                if (parts.length !== 4 || parts.some(n => !Number.isFinite(n) || n <= 0)) {
+                    throw new Error("Neveljaven zapis združitve. Uporabi obliko vrstica,stolpec,rowspan,colspan.");
+                }
+                return {
+                    row: parts[0] - 1,
+                    col: parts[1] - 1,
+                    rowspan: parts[2],
+                    colspan: parts[3]
+                };
+            });
+
+            const unique = new Map();
+            merges.forEach(m => unique.set([m.row, m.col, m.rowspan, m.colspan].join(":"), m));
+            return Array.from(unique.values());
+        }
+
+        function formatMatrixReadonly(readonly) {
+            if (!Array.isArray(readonly) || readonly.length === 0) return "";
+            return readonly.map(cell => `${Number(cell.row || 0) + 1},${Number(cell.col || 0) + 1}`).join("\n");
+        }
+
+        function formatMatrixMerges(merges) {
+            if (!Array.isArray(merges) || merges.length === 0) return "";
+            return merges
+                .map(m => `${Number(m.row || 0) + 1},${Number(m.col || 0) + 1},${Number(m.rowspan || 1)},${Number(m.colspan || 1)}`)
+                .join("\n");
+        }
+
+        function buildMatrixMergeIndex(rows, cols, merges = []) {
+            const skipMap = new Set();
+            const masterMap = new Map();
+
+            merges.forEach((merge) => {
+                const row = Number(merge.row);
+                const col = Number(merge.col);
+                const rowspan = Number(merge.rowspan);
+                const colspan = Number(merge.colspan);
+
+                if (row < 0 || col < 0 || rowspan <= 0 || colspan <= 0 || row + rowspan > rows || col + colspan > cols) {
+                    throw new Error("Združitev celic je izven meja matrike.");
+                }
+
+                const masterKey = row + ":" + col;
+                if (masterMap.has(masterKey)) {
+                    throw new Error("Podvojena začetna celica pri združitvah.");
+                }
+                masterMap.set(masterKey, { rowspan, colspan });
+
+                for (let r = row; r < row + rowspan; r += 1) {
+                    for (let c = col; c < col + colspan; c += 1) {
+                        const key = r + ":" + c;
+                        if (r === row && c === col) continue;
+                        if (skipMap.has(key) || masterMap.has(key)) {
+                            throw new Error("Združitve celic se prekrivajo.");
+                        }
+                        skipMap.add(key);
+                    }
+                }
+            });
+
+            return { skipMap, masterMap };
+        }
+
+        function isMatrixCellReadonly(readonlySet, row, col) {
+            return readonlySet.has(row + ":" + col);
+        }
+
+        function getDefaultMatrixState(rows, cols) {
+            const safeRows = Math.max(1, parsePositiveInt(rows, 1));
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            return {
+                rows: safeRows,
+                cols: safeCols,
+                preset: Array.from({ length: safeRows }, () => Array.from({ length: safeCols }, () => "")),
+                readonly: [],
+                merges: [],
+                selected: new Set()
+            };
+        }
+
+        function getMatrixStateFromInputs() {
+            const rows = Math.max(1, parsePositiveInt(matrixRowsEl.value, 1));
+            const cols = Math.max(1, parsePositiveInt(matrixColsEl.value, 1));
+            let readonly = [];
+            let merges = [];
+            try {
+                readonly = parseMatrixReadonly(matrixReadonlyEl.value);
+            } catch {}
+            try {
+                merges = parseMatrixMerges(matrixMergesEl.value);
+            } catch {}
+
+            try {
+                const { masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+                merges = Array.from(masterMap.entries()).map(([key, span]) => {
+                    const [row, col] = key.split(":").map(Number);
+                    return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                });
+            } catch {
+                merges = [];
+            }
+
+            return {
+                rows,
+                cols,
+                preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                readonly,
+                merges,
+                selected: new Set()
+            };
+        }
+
+        function syncMatrixStateToInputs() {
+            if (!matrixDesignerState) return;
+            matrixRowsEl.value = String(matrixDesignerState.rows);
+            matrixColsEl.value = String(matrixDesignerState.cols);
+            matrixPresetEl.value = matrixToPresetText(matrixDesignerState.preset, matrixDesignerState.rows, matrixDesignerState.cols);
+            matrixReadonlyEl.value = formatMatrixReadonly(matrixDesignerState.readonly);
+            matrixMergesEl.value = formatMatrixMerges(matrixDesignerState.merges);
+        }
+
+        function resizeMatrixState(rows, cols) {
+            const safeRows = Math.max(1, parsePositiveInt(rows, 1));
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            if (!matrixDesignerState) {
+                matrixDesignerState = getDefaultMatrixState(safeRows, safeCols);
+                return;
+            }
+
+            const nextPreset = Array.from({ length: safeRows }, (_, r) =>
+                Array.from({ length: safeCols }, (_, c) => String(matrixDesignerState.preset?.[r]?.[c] || ""))
+            );
+            matrixDesignerState.rows = safeRows;
+            matrixDesignerState.cols = safeCols;
+            matrixDesignerState.preset = nextPreset;
+            matrixDesignerState.readonly = (matrixDesignerState.readonly || [])
+                .filter(cell => cell.row < safeRows && cell.col < safeCols);
+            matrixDesignerState.merges = (matrixDesignerState.merges || [])
+                .filter(merge => merge.row + merge.rowspan <= safeRows && merge.col + merge.colspan <= safeCols);
+            matrixDesignerState.selected = new Set();
+        }
+
+        function setMatrixSelection(cellKey, additive) {
+            if (!matrixDesignerState) return;
+            if (!additive) {
+                matrixDesignerState.selected.clear();
+                matrixDesignerState.selected.add(cellKey);
+                return;
+            }
+
+            if (matrixDesignerState.selected.has(cellKey)) {
+                matrixDesignerState.selected.delete(cellKey);
+            } else {
+                matrixDesignerState.selected.add(cellKey);
+            }
+        }
+
+        function matrixSelectionToCoords() {
+            if (!matrixDesignerState) return [];
+            return Array.from(matrixDesignerState.selected).map(key => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col };
+            });
+        }
+
+        function normalizeMatrixMergesInState() {
+            if (!matrixDesignerState) return;
+            const { masterMap, skipMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
+            matrixDesignerState.merges = Array.from(masterMap.entries()).map(([key, span]) => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+            });
+            matrixDesignerState.readonly = (matrixDesignerState.readonly || []).filter(cell => !skipMap.has(cell.row + ":" + cell.col));
+        }
+
+        function renderMatrixDesigner() {
+            if (!matrixDesignerEl || !matrixSelectionInfoEl) return;
+            if (!matrixDesignerState) {
+                matrixDesignerEl.innerHTML = "<div class='hint'>Najprej ustvari matriko.</div>";
+                matrixSelectionInfoEl.textContent = "Izbranih celic: 0";
+                return;
+            }
+
+            const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
+            const { skipMap, masterMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
+            const selected = matrixDesignerState.selected || new Set();
+
+            const table = document.createElement("table");
+            table.className = "matrix-table";
+            const tbody = document.createElement("tbody");
+
+            for (let row = 0; row < matrixDesignerState.rows; row += 1) {
+                const tr = document.createElement("tr");
+                for (let col = 0; col < matrixDesignerState.cols; col += 1) {
+                    const key = row + ":" + col;
+                    if (skipMap.has(key)) continue;
+
+                    const td = document.createElement("td");
+                    td.dataset.matrixRow = String(row);
+                    td.dataset.matrixCol = String(col);
+
+                    if (selected.has(key)) {
+                        td.classList.add("matrix-selected-cell");
+                    }
+                    const span = masterMap.get(key);
+                    if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                    if (span?.colspan > 1) td.colSpan = span.colspan;
+
+                    if (isMatrixCellReadonly(readonlySet, row, col)) {
+                        td.classList.add("matrix-readonly-cell");
+                    }
+
+                    td.addEventListener("click", (event) => {
+                        event.preventDefault();
+                        setMatrixSelection(key, event.ctrlKey || event.metaKey);
+                        renderMatrixDesigner();
+                    });
+
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.value = String(matrixDesignerState.preset?.[row]?.[col] || "");
+                    input.addEventListener("click", (event) => event.stopPropagation());
+                    input.addEventListener("input", () => {
+                        matrixDesignerState.preset[row][col] = input.value || "";
+                        syncMatrixStateToInputs();
+                    });
+                    td.appendChild(input);
+
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+
+            table.appendChild(tbody);
+            matrixDesignerEl.innerHTML = "";
+            matrixDesignerEl.appendChild(table);
+            matrixSelectionInfoEl.textContent = `Izbranih celic: ${selected.size}`;
+            syncMatrixStateToInputs();
+        }
+
+        function buildMatrixDesignerFromInputs() {
+            try {
+                const fromInputs = getMatrixStateFromInputs();
+                matrixDesignerState = {
+                    ...fromInputs,
+                    selected: new Set()
+                };
+                renderMatrixDesigner();
+            } catch (err) {
+                setStatus(err.message || "Napaka pri pripravi matrike.");
+            }
+        }
+
+        function mergeSelectedMatrixCells() {
+            if (!matrixDesignerState) return;
+            const coords = matrixSelectionToCoords();
+            if (coords.length < 2) {
+                setStatus("Za merge izberi vsaj 2 celici.");
+                return;
+            }
+
+            const rows = coords.map(c => c.row);
+            const cols = coords.map(c => c.col);
+            const minRow = Math.min(...rows);
+            const maxRow = Math.max(...rows);
+            const minCol = Math.min(...cols);
+            const maxCol = Math.max(...cols);
+            const needed = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+            if (needed !== coords.length) {
+                setStatus("Merge zahteva pravokoten izbor celic.");
+                return;
+            }
+
+            const currentMasters = new Set((matrixDesignerState.merges || []).map(m => m.row + ":" + m.col));
+            for (const c of coords) {
+                if (currentMasters.has(c.row + ":" + c.col)) {
+                    setStatus("Najprej razdruži obstoječe merge celice v izbranem območju.");
+                    return;
+                }
+            }
+
+            const merge = { row: minRow, col: minCol, rowspan: maxRow - minRow + 1, colspan: maxCol - minCol + 1 };
+            matrixDesignerState.merges.push(merge);
+            try {
+                normalizeMatrixMergesInState();
+                matrixDesignerState.selected = new Set([minRow + ":" + minCol]);
+                renderMatrixDesigner();
+            } catch (err) {
+                matrixDesignerState.merges.pop();
+                setStatus(err.message || "Merge ni uspel.");
+            }
+        }
+
+        function splitSelectedMatrixCells() {
+            if (!matrixDesignerState) return;
+            const selected = matrixDesignerState.selected || new Set();
+            const before = matrixDesignerState.merges.length;
+            matrixDesignerState.merges = matrixDesignerState.merges.filter(m => !selected.has(m.row + ":" + m.col));
+            matrixDesignerState.selected = new Set();
+            if (before === matrixDesignerState.merges.length) {
+                setStatus("Izberi začetno (zgoraj-levo) merge celico za razdružitev.");
+            }
+            renderMatrixDesigner();
+        }
+
+        function toggleReadonlySelectedCells() {
+            if (!matrixDesignerState) return;
+            const selected = matrixSelectionToCoords();
+            if (selected.length === 0) {
+                setStatus("Najprej izberi celice.");
+                return;
+            }
+            const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
+            selected.forEach((c) => {
+                const key = c.row + ":" + c.col;
+                if (readonlySet.has(key)) readonlySet.delete(key);
+                else readonlySet.add(key);
+            });
+            matrixDesignerState.readonly = Array.from(readonlySet).map(key => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col };
+            });
+            renderMatrixDesigner();
         }
 
         function parseUnits(value) {
@@ -834,11 +1317,18 @@ Lep pozdrav
             childTypeEl.value = "table";
             childTextEl.innerHTML = "";
             childColumnsEl.value = "";
+            matrixRowsEl.value = "3";
+            matrixColsEl.value = "7";
+            matrixPresetEl.value = "";
+            matrixReadonlyEl.value = "";
+            matrixMergesEl.value = "";
+            matrixDesignerState = null;
             childFieldsEl.classList.add("hidden");
             document.getElementById("saveQuestionBtn").textContent = "Dodaj vprašanje";
             document.getElementById("questionImage").value = "";
             document.getElementById("childImage").value = "";
             updateQuestionTypeUI();
+            renderMatrixDesigner();
             renderUnitCheckboxes([]);
             renderQuestionSectionOptions();
         }
@@ -915,13 +1405,23 @@ Lep pozdrav
         function updateQuestionTypeUI() {
             const isYesNo = qTypeEl.value === "yesno";
             const isTextBlock = qTypeEl.value === "text_block";
+            const isMatrix = qTypeEl.value === "matrix_table";
             splitSurveyWrapEl.classList.toggle("hidden", !isTextBlock);
             hasChildWrapEl.classList.toggle("hidden", !isYesNo);
+            matrixFieldsEl.classList.toggle("hidden", !isMatrix);
             if (!isYesNo) {
                 hasChildEl.checked = false;
                 childFieldsEl.classList.add("hidden");
             } else {
                 childFieldsEl.classList.toggle("hidden", !hasChildEl.checked);
+            }
+
+            if (isMatrix) {
+                if (!matrixDesignerState) {
+                    buildMatrixDesignerFromInputs();
+                } else {
+                    renderMatrixDesigner();
+                }
             }
         }
 
@@ -953,7 +1453,8 @@ Lep pozdrav
                 units: getSelectedQuestionUnits(),
                 sectionId: qSectionIdEl.value || state.sections[0]?.id || "",
                 splitSurvey: false,
-                child: null
+                child: null,
+                matrix: null
             };
 
             if (!question.sectionId) {
@@ -988,6 +1489,44 @@ Lep pozdrav
                     question.child.columns = childColumns;
                 }
 
+            }
+
+            if (qTypeEl.value === "matrix_table") {
+                if (matrixDesignerState) {
+                    syncMatrixStateToInputs();
+                }
+                const rows = parsePositiveInt(matrixRowsEl.value, NaN);
+                const cols = parsePositiveInt(matrixColsEl.value, NaN);
+                if (!Number.isFinite(rows) || !Number.isFinite(cols)) {
+                    throw new Error("Za matriko vnesi veljavni pozitivni števili A in B.");
+                }
+                if (rows > 60 || cols > 60) {
+                    throw new Error("Matrika je prevelika. Trenutno je največ 60 x 60.");
+                }
+
+                const merges = parseMatrixMerges(matrixMergesEl.value);
+                const readonly = parseMatrixReadonly(matrixReadonlyEl.value);
+                const { skipMap, masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+                readonly.forEach((cell) => {
+                    const key = cell.row + ":" + cell.col;
+                    if (cell.row < 0 || cell.col < 0 || cell.row >= rows || cell.col >= cols) {
+                        throw new Error("Neureljiva celica je izven meja matrike.");
+                    }
+                    if (skipMap.has(key)) {
+                        throw new Error("Neureljiva celica ne more biti v prekritem (merged) delu.");
+                    }
+                });
+
+                question.matrix = {
+                    rows,
+                    cols,
+                    preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                    readonly,
+                    merges: Array.from(masterMap.entries()).map(([key, span]) => {
+                        const [row, col] = key.split(":").map(Number);
+                        return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                    })
+                };
             }
 
             return question;
@@ -1062,6 +1601,12 @@ Lep pozdrav
             childTypeEl.value = q.child?.type || "table";
               childTextEl.innerHTML = q.child ? q.child.text : "";
             childColumnsEl.value = q.child?.type === "text" ? "" : (q.child?.columns || []).join("; ");
+            matrixRowsEl.value = String(q.matrix?.rows || 3);
+            matrixColsEl.value = String(q.matrix?.cols || 7);
+            matrixPresetEl.value = matrixToPresetText(q.matrix?.preset, q.matrix?.rows || 3, q.matrix?.cols || 7);
+            matrixReadonlyEl.value = formatMatrixReadonly(q.matrix?.readonly);
+            matrixMergesEl.value = formatMatrixMerges(q.matrix?.merges);
+            buildMatrixDesignerFromInputs();
             document.getElementById("questionImage").value = "";
             document.getElementById("childImage").value = "";
 
@@ -1115,7 +1660,9 @@ Lep pozdrav
                                 ? "DA / NE"
                                 : q.type === "text_block"
                                     ? "Dodaj tekstovno okno"
-                                    : "Tekstovni odgovor"
+                                    : q.type === "matrix_table"
+                                        ? "Matrika (A x B)"
+                                        : "Tekstovni odgovor"
                         )}
                         ${q.image ? " | ima sliko" : ""}
                         ${q.splitSurvey ? " | razdeli anketo" : ""}
@@ -1138,6 +1685,7 @@ Lep pozdrav
                     ` : ""}
 
                     ${q.child?.image ? "<div class='hint'>Podvprašanje ima tudi sliko.</div>" : ""}
+                    ${q.type === "matrix_table" ? `<div class='hint'>Matrika: ${escapeHtml(String(q.matrix?.rows || 0))} x ${escapeHtml(String(q.matrix?.cols || 0))} | merge: ${escapeHtml(String((q.matrix?.merges || []).length))} | neureljive: ${escapeHtml(String((q.matrix?.readonly || []).length))}</div>` : ""}
                 </div>
 
                 <div class="mini-actions">
@@ -1256,6 +1804,44 @@ Lep pozdrav
             renderAll();
         }
 
+        function renderMatrixPreviewTable(matrix) {
+            const rows = Math.max(1, parsePositiveInt(matrix?.rows, 1));
+            const cols = Math.max(1, parsePositiveInt(matrix?.cols, 1));
+            const preset = parseMatrixPreset(matrixToPresetText(matrix?.preset, rows, cols), rows, cols);
+            const merges = Array.isArray(matrix?.merges) ? matrix.merges : [];
+            const readonlySet = new Set((Array.isArray(matrix?.readonly) ? matrix.readonly : []).map(c => `${c.row}:${c.col}`));
+            let skipMap = new Set();
+            let masterMap = new Map();
+            try {
+                const mergeIndex = buildMatrixMergeIndex(rows, cols, merges);
+                skipMap = mergeIndex.skipMap;
+                masterMap = mergeIndex.masterMap;
+            } catch {}
+
+            let html = "<table><tbody>";
+            for (let row = 0; row < rows; row += 1) {
+                html += "<tr>";
+                for (let col = 0; col < cols; col += 1) {
+                    const key = row + ":" + col;
+                    if (skipMap.has(key)) continue;
+
+                    const span = masterMap.get(key);
+                    const rowspanAttr = span?.rowspan > 1 ? ` rowspan="${span.rowspan}"` : "";
+                    const colspanAttr = span?.colspan > 1 ? ` colspan="${span.colspan}"` : "";
+                    const value = String(preset[row]?.[col] || "");
+
+                    if (readonlySet.has(key)) {
+                        html += `<td class="matrix-readonly-cell"${rowspanAttr}${colspanAttr}><div class="preserve-wrap">${escapeHtml(value || " ")}</div></td>`;
+                    } else {
+                        html += `<td${rowspanAttr}${colspanAttr}><input type="text" value="${escapeHtml(value)}" /></td>`;
+                    }
+                }
+                html += "</tr>";
+            }
+            html += "</tbody></table>";
+            return html;
+        }
+
         function renderPreview() {
             syncSettingsFromInputs();
 
@@ -1341,6 +1927,8 @@ Lep pozdrav
                         <label><input type="radio" name="preview_q_${section.id}_${index}" /> DA</label>
                         <label><input type="radio" name="preview_q_${section.id}_${index}" /> NE</label>
                     </div>
+                ` : q.type === "matrix_table" ? `
+                    ${renderMatrixPreviewTable(q.matrix)}
                 ` : q.type === "text_block" ? `
                 ` : `
                     <textarea class="answer-textarea" placeholder="Vpiši odgovor..."></textarea>
@@ -1501,13 +2089,55 @@ Lep pozdrav
             return normalizedChild;
         }
 
+        function normalizeMatrixConfig(matrix) {
+            if (!matrix) return null;
+            const rows = parsePositiveInt(matrix.rows, 1);
+            const cols = parsePositiveInt(matrix.cols, 1);
+            const readonly = Array.isArray(matrix.readonly)
+                ? matrix.readonly
+                    .map(cell => ({ row: parsePositiveInt(Number(cell?.row) + 1, NaN) - 1, col: parsePositiveInt(Number(cell?.col) + 1, NaN) - 1 }))
+                    .filter(cell => Number.isFinite(cell.row) && Number.isFinite(cell.col) && cell.row >= 0 && cell.col >= 0 && cell.row < rows && cell.col < cols)
+                : [];
+            const merges = Array.isArray(matrix.merges)
+                ? matrix.merges
+                    .map(merge => ({
+                        row: parsePositiveInt(Number(merge?.row) + 1, NaN) - 1,
+                        col: parsePositiveInt(Number(merge?.col) + 1, NaN) - 1,
+                        rowspan: parsePositiveInt(merge?.rowspan, NaN),
+                        colspan: parsePositiveInt(merge?.colspan, NaN)
+                    }))
+                    .filter(merge =>
+                        Number.isFinite(merge.row) &&
+                        Number.isFinite(merge.col) &&
+                        Number.isFinite(merge.rowspan) &&
+                        Number.isFinite(merge.colspan))
+                : [];
+            let mergeIndex = { masterMap: new Map() };
+            try {
+                mergeIndex = buildMatrixMergeIndex(rows, cols, merges);
+            } catch {
+                mergeIndex = { masterMap: new Map() };
+            }
+            return {
+                rows,
+                cols,
+                preset: parseMatrixPreset(matrixToPresetText(matrix.preset, rows, cols), rows, cols),
+                readonly,
+                merges: Array.from(mergeIndex.masterMap.entries()).map(([key, span]) => {
+                    const [row, col] = key.split(":").map(Number);
+                    return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                })
+            };
+        }
+
         function normalizeQuestion(question) {
             return {
                 ...question,
                 units: Array.isArray(question.units) ? question.units : [],
                 sectionId: question.sectionId || "",
                 splitSurvey: !!question.splitSurvey,
-                child: normalizeChild(question.child)
+                child: normalizeChild(question.child),
+                matrix: normalizeMatrixConfig(question.matrix)
             };
         }
 
@@ -1701,6 +2331,15 @@ Lep pozdrav
             border-collapse: collapse;
             background: white;
             margin-top: 10px;
+        }
+
+        .matrix-table input[type="text"] {
+            min-width: 80px;
+        }
+
+        .matrix-readonly-cell {
+            background: #e8f1ff;
+            font-weight: 600;
         }
 
         th, td {
@@ -2045,6 +2684,18 @@ Lep pozdrav
                         answer.text = card.querySelector(".answer-textarea")?.value || "";
                     } else if (q.type === "yesno") {
                         answer.choice = card.querySelector("input[type='radio']:checked")?.value || "";
+                    } else if (q.type === "matrix_table") {
+                        const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                        const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                        answer.matrixRows = Array.from({ length: rows }, (_, rowIndex) =>
+                            Array.from({ length: cols }, (_, colIndex) => {
+                                const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                                const el = card.querySelector(selector);
+                                if (!el) return "";
+                                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
+                                return el.textContent || "";
+                            })
+                        );
                     }
 
                     if (q.child) {
@@ -2214,6 +2865,22 @@ Lep pozdrav
                     if (radio) {
                         radio.checked = true;
                         radio.dispatchEvent(new Event("change"));
+                    }
+                } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
+                    const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                    const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                        const sourceRow = Array.isArray(answer.matrixRows[rowIndex]) ? answer.matrixRows[rowIndex] : [];
+                        for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                            const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                            const el = card.querySelector(selector);
+                            if (!el) continue;
+                            if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+                                el.value = sourceRow[colIndex] || "";
+                            } else {
+                                el.textContent = sourceRow[colIndex] || "";
+                            }
+                        }
                     }
                 }
 
@@ -2414,6 +3081,99 @@ Lep pozdrav
                     textarea.className = "answer-textarea";
                     textarea.placeholder = "Vpiši odgovor...";
                     card.appendChild(textarea);
+                } else if (q.type === "matrix_table") {
+                    const matrixTable = document.createElement("table");
+                    matrixTable.className = "matrix-table";
+                    const tbody = document.createElement("tbody");
+
+                    const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                    const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                    const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
+                    const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
+                    const readonlySet = new Set((Array.isArray(q.matrix?.readonly) ? q.matrix.readonly : []).map(c => c.row + ":" + c.col));
+                    const mergeIndex = (() => {
+                        const skipMap = new Set();
+                        const masterMap = new Map();
+                        merges.forEach((merge) => {
+                            const row = Number(merge.row);
+                            const col = Number(merge.col);
+                            const rowspan = Number(merge.rowspan);
+                            const colspan = Number(merge.colspan);
+                            if (!Number.isFinite(row) || !Number.isFinite(col) || !Number.isFinite(rowspan) || !Number.isFinite(colspan)) return;
+                            if (row < 0 || col < 0 || rowspan <= 0 || colspan <= 0 || row + rowspan > rows || col + colspan > cols) return;
+                            const masterKey = row + ":" + col;
+                            if (masterMap.has(masterKey)) return;
+                            masterMap.set(masterKey, { rowspan, colspan });
+                            for (let r = row; r < row + rowspan; r += 1) {
+                                for (let c = col; c < col + colspan; c += 1) {
+                                    if (r === row && c === col) continue;
+                                    skipMap.add(r + ":" + c);
+                                }
+                            }
+                        });
+                        return { skipMap, masterMap };
+                    })();
+
+                    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                        const tr = document.createElement("tr");
+                        const sourceRow = Array.isArray(preset[rowIndex]) ? preset[rowIndex] : [];
+                        for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                            const cellKey = rowIndex + ":" + colIndex;
+                            if (mergeIndex.skipMap.has(cellKey)) continue;
+
+                            const td = document.createElement("td");
+                            const span = mergeIndex.masterMap.get(cellKey);
+                            if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                            if (span?.colspan > 1) td.colSpan = span.colspan;
+
+                            const value = sourceRow[colIndex] || "";
+                            if (readonlySet.has(cellKey)) {
+                                td.classList.add("matrix-readonly-cell");
+                                const text = document.createElement("div");
+                                text.className = "preserve-wrap";
+                                text.textContent = value;
+                                text.dataset.cellRow = String(rowIndex);
+                                text.dataset.cellCol = String(colIndex);
+                                td.appendChild(text);
+                            } else {
+                                const input = document.createElement("input");
+                                input.type = "text";
+                                input.value = value;
+                                input.dataset.cellRow = String(rowIndex);
+                                input.dataset.cellCol = String(colIndex);
+                                td.appendChild(input);
+                            }
+                            tr.appendChild(td);
+                        }
+                        tbody.appendChild(tr);
+                    }
+
+                    matrixTable.appendChild(tbody);
+                    card.appendChild(matrixTable);
+
+                    const copyBtn = document.createElement("button");
+                    copyBtn.type = "button";
+                    copyBtn.className = "no-print";
+                    copyBtn.textContent = "Kopiraj tabelo";
+                    copyBtn.style.marginTop = "10px";
+                    copyBtn.addEventListener("click", async () => {
+                        const tsv = Array.from({ length: rows }, (_, rowIndex) =>
+                            Array.from({ length: cols }, (_, colIndex) => {
+                                const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                                const el = matrixTable.querySelector(selector);
+                                if (!el) return "";
+                                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
+                                return el.textContent || "";
+                            }).join("\t")
+                        ).join("\n");
+                        try {
+                            await navigator.clipboard.writeText(tsv);
+                            alert("Tabela kopirana v odložišče.");
+                        } catch {
+                            alert("Kopiranje ni uspelo. Označi tabelo ročno.");
+                        }
+                    });
+                    card.appendChild(copyBtn);
                 } else if (q.type === "yesno") {
                     const yesno = document.createElement("div");
                     yesno.className = "yesno";
@@ -2618,6 +3378,21 @@ Lep pozdrav
         on(hasChildEl, "change", updateQuestionTypeUI);
         on(hasChildEl, "input", updateQuestionTypeUI);
         on(qTypeEl, "change", updateQuestionTypeUI);
+        on(childTypeEl, "change", updateChildTypeUI);
+        on(matrixBuildBtnEl, "click", () => {
+            resizeMatrixState(matrixRowsEl.value, matrixColsEl.value);
+            renderMatrixDesigner();
+            setStatus("Matrika posodobljena.");
+        });
+        on(matrixMergeBtnEl, "click", mergeSelectedMatrixCells);
+        on(matrixSplitBtnEl, "click", splitSelectedMatrixCells);
+        on(matrixReadonlyBtnEl, "click", toggleReadonlySelectedCells);
+        on(matrixClearSelBtnEl, "click", () => {
+            if (matrixDesignerState) {
+                matrixDesignerState.selected = new Set();
+                renderMatrixDesigner();
+            }
+        });
 
         on(surveyPeriodEl, "input", renderPreview);
         on(surveyTitleEl, "input", renderPreview);
@@ -2626,6 +3401,15 @@ Lep pozdrav
         on(surveyEmailSubjectEl, "input", renderPreview);
         on(surveyEmailMessageEl, "input", renderPreview);
         on(surveyPdfFileNameEl, "input", renderPreview);
+        on(matrixPresetEl, "input", () => {
+            if (qTypeEl.value === "matrix_table") buildMatrixDesignerFromInputs();
+        });
+        on(matrixReadonlyEl, "input", () => {
+            if (qTypeEl.value === "matrix_table") buildMatrixDesignerFromInputs();
+        });
+        on(matrixMergesEl, "input", () => {
+            if (qTypeEl.value === "matrix_table") buildMatrixDesignerFromInputs();
+        });
         on(unitOptionsEl, "input", () => {
             const selected = getSelectedQuestionUnits();
             renderUnitCheckboxes(selected);
