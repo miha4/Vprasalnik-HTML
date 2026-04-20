@@ -475,20 +475,36 @@
 
         .matrix-table input[type="text"] {
             min-width: 80px;
+            border: 0;
+            border-radius: 0;
+            padding: 6px 8px;
+            background: transparent;
         }
 
         .matrix-designer {
             margin-top: 8px;
             max-width: 100%;
             overflow: auto;
-            border: 1px solid #cbd5e1;
-            border-radius: 10px;
+            border: 1px solid #d0d7de;
+            border-radius: 0;
             background: #fff;
-            padding: 8px;
+            padding: 0;
         }
 
         .matrix-designer table {
             margin-top: 0;
+        }
+
+        .matrix-table {
+            border-collapse: collapse;
+            margin-top: 0;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid #d0d7de !important;
+            padding: 0;
+            background: #fff;
         }
 
         .matrix-designer td {
@@ -500,8 +516,8 @@
         .matrix-designer td input[type="text"] {
             width: 100%;
             min-width: 72px;
-            border: 1px solid #d7deeb;
-            border-radius: 6px;
+            border: 0;
+            border-radius: 0;
             padding: 6px 8px;
         }
 
@@ -512,8 +528,8 @@
         }
 
         .matrix-readonly-cell {
-            background: #e8f1ff;
-            font-weight: 600;
+            background: #fff;
+            font-weight: 400;
         }
 
         th, td {
@@ -663,11 +679,13 @@ Lep pozdrav
 
                         <div class="btns" style="margin-top:8px;">
                             <button id="matrixBuildBtn" type="button">Ustvari / posodobi tabelo</button>
+                            <button id="matrixCsvImportBtn" type="button">Uvozi CSV</button>
                             <button id="matrixMergeBtn" type="button">Merge izbranih</button>
                             <button id="matrixSplitBtn" type="button">Razdruži (split)</button>
                             <button id="matrixReadonlyBtn" type="button">Toggle neureljivo</button>
                             <button id="matrixClearSelBtn" type="button">Počisti izbor</button>
                         </div>
+                        <input id="matrixCsvInput" type="file" accept=".csv,text/csv" class="hidden" />
                         <div id="matrixSelectionInfo" class="hint">Izbranih celic: 0</div>
                         <div id="matrixDesigner" class="matrix-designer"></div>
 
@@ -828,6 +846,8 @@ PO;TO;SR;ČE;PE;SO;NE
         const matrixDesignerEl = document.getElementById("matrixDesigner");
         const matrixSelectionInfoEl = document.getElementById("matrixSelectionInfo");
         const matrixBuildBtnEl = document.getElementById("matrixBuildBtn");
+        const matrixCsvImportBtnEl = document.getElementById("matrixCsvImportBtn");
+        const matrixCsvInputEl = document.getElementById("matrixCsvInput");
         const matrixMergeBtnEl = document.getElementById("matrixMergeBtn");
         const matrixSplitBtnEl = document.getElementById("matrixSplitBtn");
         const matrixReadonlyBtnEl = document.getElementById("matrixReadonlyBtn");
@@ -934,6 +954,54 @@ PO;TO;SR;ČE;PE;SO;NE
                 .split(/[\n;]+/)
                 .map(token => token.trim())
                 .filter(Boolean);
+        }
+
+        function parseCsvLine(line) {
+            const cells = [];
+            let current = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i += 1) {
+                const ch = line[i];
+                const next = line[i + 1];
+
+                if (ch === '"') {
+                    if (inQuotes && next === '"') {
+                        current += '"';
+                        i += 1;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                    continue;
+                }
+
+                if (!inQuotes && (ch === "," || ch === ";")) {
+                    cells.push(current.trim());
+                    current = "";
+                    continue;
+                }
+
+                current += ch;
+            }
+
+            cells.push(current.trim());
+            return cells;
+        }
+
+        function parseCsvTextToMatrix(text) {
+            const lines = String(text || "")
+                .replace(/^\uFEFF/, "")
+                .split(/\r?\n/)
+                .filter(line => line.trim().length > 0);
+
+            const rows = lines.map(parseCsvLine);
+            const colCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+            if (!rows.length || !colCount) {
+                return { rows: 1, cols: 1, preset: [[""]] };
+            }
+
+            const normalized = rows.map(row => Array.from({ length: colCount }, (_, i) => row[i] || ""));
+            return { rows: normalized.length, cols: colCount, preset: normalized };
         }
 
         function parseMatrixReadonly(value) {
@@ -1204,6 +1272,26 @@ PO;TO;SR;ČE;PE;SO;NE
             } catch (err) {
                 setStatus(err.message || "Napaka pri pripravi matrike.");
             }
+        }
+
+        async function importCsvIntoMatrixDesigner(file) {
+            if (!file) return;
+            const text = await file.text();
+            const parsed = parseCsvTextToMatrix(text);
+            const safeRows = Math.min(parsed.rows, 60);
+            const safeCols = Math.min(parsed.cols, 60);
+
+            matrixDesignerState = {
+                rows: safeRows,
+                cols: safeCols,
+                preset: parsed.preset.slice(0, safeRows).map(row => row.slice(0, safeCols)),
+                readonly: [],
+                merges: [],
+                selected: new Set()
+            };
+
+            renderMatrixDesigner();
+            setStatus(`CSV uvožen v matriko (${safeRows} x ${safeCols}).`);
         }
 
         function mergeSelectedMatrixCells() {
@@ -2408,11 +2496,27 @@ PO;TO;SR;ČE;PE;SO;NE
 
         .matrix-table input[type="text"] {
             min-width: 80px;
+            border: 0;
+            border-radius: 0;
+            padding: 6px 8px;
+            background: transparent;
+        }
+
+        .matrix-table {
+            border-collapse: collapse;
+            margin-top: 0;
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            border: 1px solid #d0d7de !important;
+            padding: 0;
+            background: #fff;
         }
 
         .matrix-readonly-cell {
-            background: #e8f1ff;
-            font-weight: 600;
+            background: #fff;
+            font-weight: 400;
         }
 
         th, td {
@@ -3504,6 +3608,20 @@ PO;TO;SR;ČE;PE;SO;NE
             resizeMatrixState(matrixRowsEl.value, matrixColsEl.value);
             renderMatrixDesigner();
             setStatus("Matrika posodobljena.");
+        });
+        on(matrixCsvImportBtnEl, "click", () => {
+            matrixCsvInputEl?.click();
+        });
+        on(matrixCsvInputEl, "change", async (event) => {
+            const file = event?.target?.files && event.target.files[0];
+            if (file) {
+                try {
+                    await importCsvIntoMatrixDesigner(file);
+                } catch (err) {
+                    setStatus(err?.message || "CSV uvoz ni uspel.");
+                }
+            }
+            if (event?.target) event.target.value = "";
         });
         on(matrixMergeBtnEl, "click", mergeSelectedMatrixCells);
         on(matrixSplitBtnEl, "click", splitSelectedMatrixCells);
