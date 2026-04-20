@@ -498,6 +498,8 @@
         .matrix-table {
             border-collapse: collapse;
             margin-top: 0;
+            width: 100%;
+            table-layout: fixed;
         }
 
         .matrix-table th,
@@ -525,6 +527,20 @@
             outline: 2px solid #2563eb;
             outline-offset: -2px;
             background: #eaf1ff;
+        }
+
+        .matrix-col-resizer {
+            position: absolute;
+            right: -2px;
+            top: 0;
+            width: 6px;
+            height: 100%;
+            cursor: col-resize;
+            z-index: 3;
+        }
+
+        .matrix-col-resizer:hover {
+            background: rgba(37, 99, 235, 0.18);
         }
 
         .matrix-readonly-cell {
@@ -862,6 +878,7 @@ PO;TO;SR;ČE;PE;SO;NE
         let activeRteEl = qTextEl;
         let savedSelectionRange = null;
         let matrixDesignerState = null;
+        let matrixSelectionAnchor = null;
 
 
         function setStatus(message) {
@@ -915,6 +932,24 @@ PO;TO;SR;ČE;PE;SO;NE
             const parsed = Number.parseInt(String(value || "").trim(), 10);
             if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
             return parsed;
+        }
+
+        function getDefaultColumnWidths(cols) {
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            const base = 100 / safeCols;
+            return Array.from({ length: safeCols }, () => base);
+        }
+
+        function normalizeColumnWidths(widths, cols) {
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            const source = Array.isArray(widths) ? widths : [];
+            const normalized = Array.from({ length: safeCols }, (_, i) => {
+                const value = Number(source[i]);
+                return Number.isFinite(value) && value > 0 ? value : (100 / safeCols);
+            });
+
+            const sum = normalized.reduce((acc, v) => acc + v, 0) || 1;
+            return normalized.map(v => (v / sum) * 100);
         }
 
         function parseMatrixPreset(value, rows, cols) {
@@ -1095,6 +1130,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 rows: safeRows,
                 cols: safeCols,
                 preset: Array.from({ length: safeRows }, () => Array.from({ length: safeCols }, () => "")),
+                colWidths: getDefaultColumnWidths(safeCols),
                 readonly: [],
                 merges: [],
                 selected: new Set()
@@ -1127,6 +1163,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 rows,
                 cols,
                 preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                colWidths: normalizeColumnWidths(matrixDesignerState?.colWidths || [], cols),
                 readonly,
                 merges,
                 selected: new Set()
@@ -1156,18 +1193,37 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixDesignerState.rows = safeRows;
             matrixDesignerState.cols = safeCols;
             matrixDesignerState.preset = nextPreset;
+            matrixDesignerState.colWidths = normalizeColumnWidths(matrixDesignerState.colWidths || [], safeCols);
             matrixDesignerState.readonly = (matrixDesignerState.readonly || [])
                 .filter(cell => cell.row < safeRows && cell.col < safeCols);
             matrixDesignerState.merges = (matrixDesignerState.merges || [])
                 .filter(merge => merge.row + merge.rowspan <= safeRows && merge.col + merge.colspan <= safeCols);
             matrixDesignerState.selected = new Set();
+            matrixSelectionAnchor = null;
         }
 
-        function setMatrixSelection(cellKey, additive) {
+        function setMatrixSelection(cellKey, additive, rangeMode = false) {
             if (!matrixDesignerState) return;
+            if (rangeMode && matrixSelectionAnchor) {
+                const [aRow, aCol] = matrixSelectionAnchor.split(":").map(Number);
+                const [bRow, bCol] = cellKey.split(":").map(Number);
+                const minRow = Math.min(aRow, bRow);
+                const maxRow = Math.max(aRow, bRow);
+                const minCol = Math.min(aCol, bCol);
+                const maxCol = Math.max(aCol, bCol);
+                matrixDesignerState.selected.clear();
+                for (let row = minRow; row <= maxRow; row += 1) {
+                    for (let col = minCol; col <= maxCol; col += 1) {
+                        matrixDesignerState.selected.add(row + ":" + col);
+                    }
+                }
+                return;
+            }
+
             if (!additive) {
                 matrixDesignerState.selected.clear();
                 matrixDesignerState.selected.add(cellKey);
+                matrixSelectionAnchor = cellKey;
                 return;
             }
 
@@ -1176,6 +1232,7 @@ PO;TO;SR;ČE;PE;SO;NE
             } else {
                 matrixDesignerState.selected.add(cellKey);
             }
+            matrixSelectionAnchor = cellKey;
         }
 
         function matrixSelectionToCoords() {
@@ -1211,6 +1268,15 @@ PO;TO;SR;ČE;PE;SO;NE
             const table = document.createElement("table");
             table.className = "matrix-table";
             const tbody = document.createElement("tbody");
+            const colgroup = document.createElement("colgroup");
+            const normalizedWidths = normalizeColumnWidths(matrixDesignerState.colWidths || [], matrixDesignerState.cols);
+            matrixDesignerState.colWidths = normalizedWidths;
+            normalizedWidths.forEach((width) => {
+                const col = document.createElement("col");
+                col.style.width = width + "%";
+                colgroup.appendChild(col);
+            });
+            table.appendChild(colgroup);
 
             for (let row = 0; row < matrixDesignerState.rows; row += 1) {
                 const tr = document.createElement("tr");
@@ -1235,7 +1301,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                     td.addEventListener("click", (event) => {
                         event.preventDefault();
-                        setMatrixSelection(key, event.ctrlKey || event.metaKey);
+                        setMatrixSelection(key, event.ctrlKey || event.metaKey, event.shiftKey);
                         renderMatrixDesigner();
                     });
 
@@ -1248,6 +1314,56 @@ PO;TO;SR;ČE;PE;SO;NE
                         syncMatrixStateToInputs();
                     });
                     td.appendChild(input);
+
+                    if (row === 0) {
+                        const span = masterMap.get(key);
+                        const boundaryCol = col + ((span?.colspan || 1) - 1);
+                        if (boundaryCol < matrixDesignerState.cols - 1) {
+                            const resizer = document.createElement("div");
+                            resizer.className = "matrix-col-resizer";
+                            resizer.addEventListener("mousedown", (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+
+                                const startX = event.clientX;
+                                const tableRect = table.getBoundingClientRect();
+                                const startWidths = [...matrixDesignerState.colWidths];
+                                const leftCol = boundaryCol;
+                                const rightCol = boundaryCol + 1;
+                                const minPct = 3;
+
+                                const onMouseMove = (moveEvent) => {
+                                    const deltaPx = moveEvent.clientX - startX;
+                                    const deltaPct = (deltaPx / Math.max(tableRect.width, 1)) * 100;
+                                    let leftWidth = startWidths[leftCol] + deltaPct;
+                                    let rightWidth = startWidths[rightCol] - deltaPct;
+
+                                    if (leftWidth < minPct) {
+                                        rightWidth -= (minPct - leftWidth);
+                                        leftWidth = minPct;
+                                    }
+                                    if (rightWidth < minPct) {
+                                        leftWidth -= (minPct - rightWidth);
+                                        rightWidth = minPct;
+                                    }
+                                    if (leftWidth < minPct || rightWidth < minPct) return;
+
+                                    matrixDesignerState.colWidths[leftCol] = leftWidth;
+                                    matrixDesignerState.colWidths[rightCol] = rightWidth;
+                                    renderMatrixDesigner();
+                                };
+
+                                const onMouseUp = () => {
+                                    window.removeEventListener("mousemove", onMouseMove);
+                                    window.removeEventListener("mouseup", onMouseUp);
+                                };
+
+                                window.addEventListener("mousemove", onMouseMove);
+                                window.addEventListener("mouseup", onMouseUp);
+                            });
+                            td.appendChild(resizer);
+                        }
+                    }
 
                     tr.appendChild(td);
                 }
@@ -1268,6 +1384,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     ...fromInputs,
                     selected: new Set()
                 };
+                matrixSelectionAnchor = null;
                 renderMatrixDesigner();
             } catch (err) {
                 setStatus(err.message || "Napaka pri pripravi matrike.");
@@ -1285,10 +1402,12 @@ PO;TO;SR;ČE;PE;SO;NE
                 rows: safeRows,
                 cols: safeCols,
                 preset: parsed.preset.slice(0, safeRows).map(row => row.slice(0, safeCols)),
+                colWidths: getDefaultColumnWidths(safeCols),
                 readonly: [],
                 merges: [],
                 selected: new Set()
             };
+            matrixSelectionAnchor = null;
 
             renderMatrixDesigner();
             setStatus(`CSV uvožen v matriko (${safeRows} x ${safeCols}).`);
@@ -1327,6 +1446,7 @@ PO;TO;SR;ČE;PE;SO;NE
             try {
                 normalizeMatrixMergesInState();
                 matrixDesignerState.selected = new Set([minRow + ":" + minCol]);
+                matrixSelectionAnchor = minRow + ":" + minCol;
                 renderMatrixDesigner();
             } catch (err) {
                 matrixDesignerState.merges.pop();
@@ -1340,6 +1460,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const before = matrixDesignerState.merges.length;
             matrixDesignerState.merges = matrixDesignerState.merges.filter(m => !selected.has(m.row + ":" + m.col));
             matrixDesignerState.selected = new Set();
+            matrixSelectionAnchor = null;
             if (before === matrixDesignerState.merges.length) {
                 setStatus("Izberi začetno (zgoraj-levo) merge celico za razdružitev.");
             }
@@ -1466,6 +1587,7 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixReadonlyEl.value = "";
             matrixMergesEl.value = "";
             matrixDesignerState = null;
+            matrixSelectionAnchor = null;
             childFieldsEl.classList.add("hidden");
             document.getElementById("saveQuestionBtn").textContent = "Dodaj vprašanje";
             document.getElementById("questionImage").value = "";
@@ -1664,6 +1786,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     rows,
                     cols,
                     preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                    colWidths: normalizeColumnWidths(matrixDesignerState?.colWidths || [], cols),
                     readonly,
                     merges: Array.from(masterMap.entries()).map(([key, span]) => {
                         const [row, col] = key.split(":").map(Number);
@@ -1750,6 +1873,10 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixReadonlyEl.value = formatMatrixReadonly(q.matrix?.readonly);
             matrixMergesEl.value = formatMatrixMerges(q.matrix?.merges);
             buildMatrixDesignerFromInputs();
+            if (matrixDesignerState) {
+                matrixDesignerState.colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], matrixDesignerState.cols);
+                renderMatrixDesigner();
+            }
             document.getElementById("questionImage").value = "";
             document.getElementById("childImage").value = "";
 
@@ -1952,6 +2079,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const cols = Math.max(1, parsePositiveInt(matrix?.cols, 1));
             const preset = parseMatrixPreset(matrixToPresetText(matrix?.preset, rows, cols), rows, cols);
             const merges = Array.isArray(matrix?.merges) ? matrix.merges : [];
+            const colWidths = normalizeColumnWidths(matrix?.colWidths || [], cols);
             const readonlySet = new Set((Array.isArray(matrix?.readonly) ? matrix.readonly : []).map(c => `${c.row}:${c.col}`));
             let skipMap = new Set();
             let masterMap = new Map();
@@ -1961,7 +2089,9 @@ PO;TO;SR;ČE;PE;SO;NE
                 masterMap = mergeIndex.masterMap;
             } catch {}
 
-            let html = "<table><tbody>";
+            let html = "<table class=\"matrix-table\"><colgroup>" +
+                colWidths.map(width => `<col style=\"width:${width}%;\" />`).join("") +
+                "</colgroup><tbody>";
             for (let row = 0; row < rows; row += 1) {
                 html += "<tr>";
                 for (let col = 0; col < cols; col += 1) {
@@ -2265,6 +2395,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 rows,
                 cols,
                 preset: parseMatrixPreset(matrixToPresetText(matrix.preset, rows, cols), rows, cols),
+                colWidths: normalizeColumnWidths(matrix.colWidths || [], cols),
                 readonly,
                 merges: Array.from(mergeIndex.masterMap.entries()).map(([key, span]) => {
                     const [row, col] = key.split(":").map(Number);
@@ -2505,6 +2636,8 @@ PO;TO;SR;ČE;PE;SO;NE
         .matrix-table {
             border-collapse: collapse;
             margin-top: 0;
+            width: 100%;
+            table-layout: fixed;
         }
 
         .matrix-table th,
@@ -2779,6 +2912,17 @@ PO;TO;SR;ČE;PE;SO;NE
                 .split(/[\\n,;]+/)
                 .map(x => x.trim())
                 .filter(Boolean);
+        }
+
+        function normalizeColumnWidths(widths, cols) {
+            const safeCols = Math.max(1, Number.parseInt(String(cols || 0), 10) || 1);
+            const source = Array.isArray(widths) ? widths : [];
+            const normalized = Array.from({ length: safeCols }, (_, i) => {
+                const value = Number(source[i]);
+                return Number.isFinite(value) && value > 0 ? value : (100 / safeCols);
+            });
+            const sum = normalized.reduce((acc, v) => acc + v, 0) || 1;
+            return normalized.map(v => (v / sum) * 100);
         }
 
         function normalizeRuntimeConfig(config) {
@@ -3311,6 +3455,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                     const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
+                    const colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], cols);
                     const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
                     const readonlySet = new Set((Array.isArray(q.matrix?.readonly) ? q.matrix.readonly : []).map(c => c.row + ":" + c.col));
                     const mergeIndex = (() => {
@@ -3335,6 +3480,14 @@ PO;TO;SR;ČE;PE;SO;NE
                         });
                         return { skipMap, masterMap };
                     })();
+
+                    const colgroup = document.createElement("colgroup");
+                    colWidths.forEach((width) => {
+                        const col = document.createElement("col");
+                        col.style.width = width + "%";
+                        colgroup.appendChild(col);
+                    });
+                    matrixTable.appendChild(colgroup);
 
                     for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
                         const tr = document.createElement("tr");
@@ -3629,6 +3782,7 @@ PO;TO;SR;ČE;PE;SO;NE
         on(matrixClearSelBtnEl, "click", () => {
             if (matrixDesignerState) {
                 matrixDesignerState.selected = new Set();
+                matrixSelectionAnchor = null;
                 renderMatrixDesigner();
             }
         });
