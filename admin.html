@@ -3282,8 +3282,8 @@ PO;TO;SR;ČE;PE;SO;NE
                                 if (!el) return "";
                                 if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
                                 return el.textContent || "";
-                            }).join("\t")
-                        ).join("\n");
+                            }).join("\\t")
+                        ).join("\\n");
                         try {
                             await navigator.clipboard.writeText(tsv);
                             alert("Tabela kopirana v odložišče.");
