@@ -117,6 +117,7 @@
         }
 
         input[type="text"],
+        input[type="date"],
         textarea,
         select {
             width: 100%;
@@ -391,6 +392,17 @@
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
+        }
+
+        .survey-top-grid > div {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-self: start;
+        }
+
+        .survey-top-grid > div > label {
+            margin: 0;
         }
 
             .survey-top-grid .full {
@@ -2243,6 +2255,7 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         input[type="text"],
+        input[type="date"],
         select,
         textarea {
             width: 100%;
@@ -2303,6 +2316,17 @@ PO;TO;SR;ČE;PE;SO;NE
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 12px;
+        }
+
+        .top-grid > div {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-self: start;
+        }
+
+        .top-grid > div > label {
+            margin: 0;
         }
 
         .full {
@@ -2601,7 +2625,7 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="date-field">
                     <label for="surveyDate">Datum</label>
                     <input id="surveyDate" type="date" />
-            </div>
+                </div>
 
                 <div>
                     <label for="surveyUnit">Enota</label>
