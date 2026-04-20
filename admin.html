@@ -419,6 +419,15 @@
             margin-top: 10px;
         }
 
+        .matrix-table input[type="text"] {
+            min-width: 80px;
+        }
+
+        .matrix-readonly-cell {
+            background: #e8f1ff;
+            font-weight: 600;
+        }
+
         th, td {
             border: 1px solid #cfd8e3;
             padding: 8px;
@@ -553,6 +562,16 @@ Lep pozdrav
 PO;TO;SR;ČE;PE;SO;NE
 ;;;;;;;"></textarea>
                         <div class="hint">Prazne celice ostanejo namenjene anketirancu. Če je manj podatkov kot A x B, se manjkajoče celice pustijo prazne.</div>
+
+                        <label for="matrixReadonly">Neureljive celice (1-based: vrstica,stolpec; loči s ; ali novo vrstico)</label>
+                        <textarea id="matrixReadonly" placeholder="Primer:
+1,1; 2,1"></textarea>
+
+                        <label for="matrixMerges">Združitve celic (1-based: vrstica,stolpec,rowspan,colspan; loči s ; ali novo vrstico)</label>
+                        <textarea id="matrixMerges" placeholder="Primer:
+1,1,1,2
+3,1,2,1"></textarea>
+                        <div class="hint">Združitve in neureljive celice omogočajo postavitev glave (mesec/dan) + vnos samo v namenjene celice.</div>
                     </div>
                     <label for="qSectionId">Del ankete</label>
                     <select id="qSectionId"></select>
@@ -702,6 +721,8 @@ PO;TO;SR;ČE;PE;SO;NE
         const matrixRowsEl = document.getElementById("matrixRows");
         const matrixColsEl = document.getElementById("matrixCols");
         const matrixPresetEl = document.getElementById("matrixPreset");
+        const matrixReadonlyEl = document.getElementById("matrixReadonly");
+        const matrixMergesEl = document.getElementById("matrixMerges");
         const questionListEl = document.getElementById("questionList");
         const sectionOverviewEl = document.getElementById("sectionOverview");
         const previewContainerEl = document.getElementById("previewContainer");
@@ -796,6 +817,97 @@ PO;TO;SR;ČE;PE;SO;NE
                 const row = Array.isArray(normalized[rowIndex]) ? normalized[rowIndex] : [];
                 return Array.from({ length: safeCols }, (_, colIndex) => String(row[colIndex] || "")).join(";");
             }).join("\n");
+        }
+
+        function splitCoordinateTokens(value) {
+            return String(value || "")
+                .split(/[\n;]+/)
+                .map(token => token.trim())
+                .filter(Boolean);
+        }
+
+        function parseMatrixReadonly(value) {
+            const coords = splitCoordinateTokens(value).map(token => {
+                const parts = token.split(",").map(x => Number.parseInt(x.trim(), 10));
+                if (parts.length !== 2 || parts.some(n => !Number.isFinite(n) || n <= 0)) {
+                    throw new Error("Neveljaven zapis neureljive celice. Uporabi obliko vrstica,stolpec.");
+                }
+                return { row: parts[0] - 1, col: parts[1] - 1 };
+            });
+
+            const unique = new Map();
+            coords.forEach(c => unique.set(c.row + ":" + c.col, c));
+            return Array.from(unique.values());
+        }
+
+        function parseMatrixMerges(value) {
+            const merges = splitCoordinateTokens(value).map(token => {
+                const parts = token.split(",").map(x => Number.parseInt(x.trim(), 10));
+                if (parts.length !== 4 || parts.some(n => !Number.isFinite(n) || n <= 0)) {
+                    throw new Error("Neveljaven zapis združitve. Uporabi obliko vrstica,stolpec,rowspan,colspan.");
+                }
+                return {
+                    row: parts[0] - 1,
+                    col: parts[1] - 1,
+                    rowspan: parts[2],
+                    colspan: parts[3]
+                };
+            });
+
+            const unique = new Map();
+            merges.forEach(m => unique.set([m.row, m.col, m.rowspan, m.colspan].join(":"), m));
+            return Array.from(unique.values());
+        }
+
+        function formatMatrixReadonly(readonly) {
+            if (!Array.isArray(readonly) || readonly.length === 0) return "";
+            return readonly.map(cell => `${Number(cell.row || 0) + 1},${Number(cell.col || 0) + 1}`).join("\n");
+        }
+
+        function formatMatrixMerges(merges) {
+            if (!Array.isArray(merges) || merges.length === 0) return "";
+            return merges
+                .map(m => `${Number(m.row || 0) + 1},${Number(m.col || 0) + 1},${Number(m.rowspan || 1)},${Number(m.colspan || 1)}`)
+                .join("\n");
+        }
+
+        function buildMatrixMergeIndex(rows, cols, merges = []) {
+            const skipMap = new Set();
+            const masterMap = new Map();
+
+            merges.forEach((merge) => {
+                const row = Number(merge.row);
+                const col = Number(merge.col);
+                const rowspan = Number(merge.rowspan);
+                const colspan = Number(merge.colspan);
+
+                if (row < 0 || col < 0 || rowspan <= 0 || colspan <= 0 || row + rowspan > rows || col + colspan > cols) {
+                    throw new Error("Združitev celic je izven meja matrike.");
+                }
+
+                const masterKey = row + ":" + col;
+                if (masterMap.has(masterKey)) {
+                    throw new Error("Podvojena začetna celica pri združitvah.");
+                }
+                masterMap.set(masterKey, { rowspan, colspan });
+
+                for (let r = row; r < row + rowspan; r += 1) {
+                    for (let c = col; c < col + colspan; c += 1) {
+                        const key = r + ":" + c;
+                        if (r === row && c === col) continue;
+                        if (skipMap.has(key) || masterMap.has(key)) {
+                            throw new Error("Združitve celic se prekrivajo.");
+                        }
+                        skipMap.add(key);
+                    }
+                }
+            });
+
+            return { skipMap, masterMap };
+        }
+
+        function isMatrixCellReadonly(readonlySet, row, col) {
+            return readonlySet.has(row + ":" + col);
         }
 
         function parseUnits(value) {
@@ -895,6 +1007,8 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixRowsEl.value = "3";
             matrixColsEl.value = "7";
             matrixPresetEl.value = "";
+            matrixReadonlyEl.value = "";
+            matrixMergesEl.value = "";
             childFieldsEl.classList.add("hidden");
             document.getElementById("saveQuestionBtn").textContent = "Dodaj vprašanje";
             document.getElementById("questionImage").value = "";
@@ -1064,10 +1178,28 @@ PO;TO;SR;ČE;PE;SO;NE
                     throw new Error("Matrika je prevelika. Trenutno je največ 60 x 60.");
                 }
 
+                const merges = parseMatrixMerges(matrixMergesEl.value);
+                const readonly = parseMatrixReadonly(matrixReadonlyEl.value);
+                const { skipMap, masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+                readonly.forEach((cell) => {
+                    const key = cell.row + ":" + cell.col;
+                    if (cell.row < 0 || cell.col < 0 || cell.row >= rows || cell.col >= cols) {
+                        throw new Error("Neureljiva celica je izven meja matrike.");
+                    }
+                    if (skipMap.has(key)) {
+                        throw new Error("Neureljiva celica ne more biti v prekritem (merged) delu.");
+                    }
+                });
+
                 question.matrix = {
                     rows,
                     cols,
-                    preset: parseMatrixPreset(matrixPresetEl.value, rows, cols)
+                    preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                    readonly,
+                    merges: Array.from(masterMap.entries()).map(([key, span]) => {
+                        const [row, col] = key.split(":").map(Number);
+                        return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                    })
                 };
             }
 
@@ -1146,6 +1278,8 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixRowsEl.value = String(q.matrix?.rows || 3);
             matrixColsEl.value = String(q.matrix?.cols || 7);
             matrixPresetEl.value = matrixToPresetText(q.matrix?.preset, q.matrix?.rows || 3, q.matrix?.cols || 7);
+            matrixReadonlyEl.value = formatMatrixReadonly(q.matrix?.readonly);
+            matrixMergesEl.value = formatMatrixMerges(q.matrix?.merges);
             document.getElementById("questionImage").value = "";
             document.getElementById("childImage").value = "";
 
@@ -1224,7 +1358,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     ` : ""}
 
                     ${q.child?.image ? "<div class='hint'>Podvprašanje ima tudi sliko.</div>" : ""}
-                    ${q.type === "matrix_table" ? `<div class='hint'>Matrika: ${escapeHtml(String(q.matrix?.rows || 0))} x ${escapeHtml(String(q.matrix?.cols || 0))}</div>` : ""}
+                    ${q.type === "matrix_table" ? `<div class='hint'>Matrika: ${escapeHtml(String(q.matrix?.rows || 0))} x ${escapeHtml(String(q.matrix?.cols || 0))} | merge: ${escapeHtml(String((q.matrix?.merges || []).length))} | neureljive: ${escapeHtml(String((q.matrix?.readonly || []).length))}</div>` : ""}
                 </div>
 
                 <div class="mini-actions">
@@ -1343,6 +1477,38 @@ PO;TO;SR;ČE;PE;SO;NE
             renderAll();
         }
 
+        function renderMatrixPreviewTable(matrix) {
+            const rows = Math.max(1, parsePositiveInt(matrix?.rows, 1));
+            const cols = Math.max(1, parsePositiveInt(matrix?.cols, 1));
+            const preset = parseMatrixPreset(matrixToPresetText(matrix?.preset, rows, cols), rows, cols);
+            const merges = Array.isArray(matrix?.merges) ? matrix.merges : [];
+            const readonlySet = new Set((Array.isArray(matrix?.readonly) ? matrix.readonly : []).map(c => `${c.row}:${c.col}`));
+            const { skipMap, masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+
+            let html = "<table><tbody>";
+            for (let row = 0; row < rows; row += 1) {
+                html += "<tr>";
+                for (let col = 0; col < cols; col += 1) {
+                    const key = row + ":" + col;
+                    if (skipMap.has(key)) continue;
+
+                    const span = masterMap.get(key);
+                    const rowspanAttr = span?.rowspan > 1 ? ` rowspan="${span.rowspan}"` : "";
+                    const colspanAttr = span?.colspan > 1 ? ` colspan="${span.colspan}"` : "";
+                    const value = String(preset[row]?.[col] || "");
+
+                    if (readonlySet.has(key)) {
+                        html += `<td class="matrix-readonly-cell"${rowspanAttr}${colspanAttr}><div class="preserve-wrap">${escapeHtml(value || " ")}</div></td>`;
+                    } else {
+                        html += `<td${rowspanAttr}${colspanAttr}><input type="text" value="${escapeHtml(value)}" /></td>`;
+                    }
+                }
+                html += "</tr>";
+            }
+            html += "</tbody></table>";
+            return html;
+        }
+
         function renderPreview() {
             syncSettingsFromInputs();
 
@@ -1429,12 +1595,7 @@ PO;TO;SR;ČE;PE;SO;NE
                         <label><input type="radio" name="preview_q_${section.id}_${index}" /> NE</label>
                     </div>
                 ` : q.type === "matrix_table" ? `
-                    <table>
-                        <tbody>
-                            ${(q.matrix?.preset || Array.from({ length: q.matrix?.rows || 1 }, () => Array.from({ length: q.matrix?.cols || 1 }, () => "")))
-                                .map(row => `<tr>${(row || []).map(cell => `<td><input type="text" value="${escapeHtml(String(cell || ""))}" /></td>`).join("")}</tr>`).join("")}
-                        </tbody>
-                    </table>
+                    ${renderMatrixPreviewTable(q.matrix)}
                 ` : q.type === "text_block" ? `
                 ` : `
                     <textarea class="answer-textarea" placeholder="Vpiši odgovor..."></textarea>
@@ -1599,10 +1760,40 @@ PO;TO;SR;ČE;PE;SO;NE
             if (!matrix) return null;
             const rows = parsePositiveInt(matrix.rows, 1);
             const cols = parsePositiveInt(matrix.cols, 1);
+            const readonly = Array.isArray(matrix.readonly)
+                ? matrix.readonly
+                    .map(cell => ({ row: parsePositiveInt(Number(cell?.row) + 1, NaN) - 1, col: parsePositiveInt(Number(cell?.col) + 1, NaN) - 1 }))
+                    .filter(cell => Number.isFinite(cell.row) && Number.isFinite(cell.col) && cell.row >= 0 && cell.col >= 0 && cell.row < rows && cell.col < cols)
+                : [];
+            const merges = Array.isArray(matrix.merges)
+                ? matrix.merges
+                    .map(merge => ({
+                        row: parsePositiveInt(Number(merge?.row) + 1, NaN) - 1,
+                        col: parsePositiveInt(Number(merge?.col) + 1, NaN) - 1,
+                        rowspan: parsePositiveInt(merge?.rowspan, NaN),
+                        colspan: parsePositiveInt(merge?.colspan, NaN)
+                    }))
+                    .filter(merge =>
+                        Number.isFinite(merge.row) &&
+                        Number.isFinite(merge.col) &&
+                        Number.isFinite(merge.rowspan) &&
+                        Number.isFinite(merge.colspan))
+                : [];
+            let mergeIndex = { masterMap: new Map() };
+            try {
+                mergeIndex = buildMatrixMergeIndex(rows, cols, merges);
+            } catch {
+                mergeIndex = { masterMap: new Map() };
+            }
             return {
                 rows,
                 cols,
-                preset: parseMatrixPreset(matrixToPresetText(matrix.preset, rows, cols), rows, cols)
+                preset: parseMatrixPreset(matrixToPresetText(matrix.preset, rows, cols), rows, cols),
+                readonly,
+                merges: Array.from(mergeIndex.masterMap.entries()).map(([key, span]) => {
+                    const [row, col] = key.split(":").map(Number);
+                    return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                })
             };
         }
 
@@ -1807,6 +1998,15 @@ PO;TO;SR;ČE;PE;SO;NE
             border-collapse: collapse;
             background: white;
             margin-top: 10px;
+        }
+
+        .matrix-table input[type="text"] {
+            min-width: 80px;
+        }
+
+        .matrix-readonly-cell {
+            background: #e8f1ff;
+            font-weight: 600;
         }
 
         th, td {
@@ -2152,8 +2352,16 @@ PO;TO;SR;ČE;PE;SO;NE
                     } else if (q.type === "yesno") {
                         answer.choice = card.querySelector("input[type='radio']:checked")?.value || "";
                     } else if (q.type === "matrix_table") {
-                        answer.matrixRows = Array.from(card.querySelectorAll(".matrix-table tbody tr")).map(tr =>
-                            Array.from(tr.querySelectorAll("input")).map(input => input.value || "")
+                        const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                        const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                        answer.matrixRows = Array.from({ length: rows }, (_, rowIndex) =>
+                            Array.from({ length: cols }, (_, colIndex) => {
+                                const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                                const el = card.querySelector(selector);
+                                if (!el) return "";
+                                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
+                                return el.textContent || "";
+                            })
                         );
                     }
 
@@ -2326,13 +2534,21 @@ PO;TO;SR;ČE;PE;SO;NE
                         radio.dispatchEvent(new Event("change"));
                     }
                 } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
-                    const matrixRows = Array.from(card.querySelectorAll(".matrix-table tbody tr"));
-                    matrixRows.forEach((tr, rowIndex) => {
+                    const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                    const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
                         const sourceRow = Array.isArray(answer.matrixRows[rowIndex]) ? answer.matrixRows[rowIndex] : [];
-                        Array.from(tr.querySelectorAll("input")).forEach((input, colIndex) => {
-                            input.value = sourceRow[colIndex] || "";
-                        });
-                    });
+                        for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                            const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                            const el = card.querySelector(selector);
+                            if (!el) continue;
+                            if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+                                el.value = sourceRow[colIndex] || "";
+                            } else {
+                                el.textContent = sourceRow[colIndex] || "";
+                            }
+                        }
+                    }
                 }
 
                 if (q.child && answer.child) {
@@ -2540,16 +2756,60 @@ PO;TO;SR;ČE;PE;SO;NE
                     const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                     const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
+                    const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
+                    const readonlySet = new Set((Array.isArray(q.matrix?.readonly) ? q.matrix.readonly : []).map(c => c.row + ":" + c.col));
+                    const mergeIndex = (() => {
+                        const skipMap = new Set();
+                        const masterMap = new Map();
+                        merges.forEach((merge) => {
+                            const row = Number(merge.row);
+                            const col = Number(merge.col);
+                            const rowspan = Number(merge.rowspan);
+                            const colspan = Number(merge.colspan);
+                            if (!Number.isFinite(row) || !Number.isFinite(col) || !Number.isFinite(rowspan) || !Number.isFinite(colspan)) return;
+                            if (row < 0 || col < 0 || rowspan <= 0 || colspan <= 0 || row + rowspan > rows || col + colspan > cols) return;
+                            const masterKey = row + ":" + col;
+                            if (masterMap.has(masterKey)) return;
+                            masterMap.set(masterKey, { rowspan, colspan });
+                            for (let r = row; r < row + rowspan; r += 1) {
+                                for (let c = col; c < col + colspan; c += 1) {
+                                    if (r === row && c === col) continue;
+                                    skipMap.add(r + ":" + c);
+                                }
+                            }
+                        });
+                        return { skipMap, masterMap };
+                    })();
 
                     for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
                         const tr = document.createElement("tr");
                         const sourceRow = Array.isArray(preset[rowIndex]) ? preset[rowIndex] : [];
                         for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                            const cellKey = rowIndex + ":" + colIndex;
+                            if (mergeIndex.skipMap.has(cellKey)) continue;
+
                             const td = document.createElement("td");
-                            const input = document.createElement("input");
-                            input.type = "text";
-                            input.value = sourceRow[colIndex] || "";
-                            td.appendChild(input);
+                            const span = mergeIndex.masterMap.get(cellKey);
+                            if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                            if (span?.colspan > 1) td.colSpan = span.colspan;
+
+                            const value = sourceRow[colIndex] || "";
+                            if (readonlySet.has(cellKey)) {
+                                td.classList.add("matrix-readonly-cell");
+                                const text = document.createElement("div");
+                                text.className = "preserve-wrap";
+                                text.textContent = value;
+                                text.dataset.cellRow = String(rowIndex);
+                                text.dataset.cellCol = String(colIndex);
+                                td.appendChild(text);
+                            } else {
+                                const input = document.createElement("input");
+                                input.type = "text";
+                                input.value = value;
+                                input.dataset.cellRow = String(rowIndex);
+                                input.dataset.cellCol = String(colIndex);
+                                td.appendChild(input);
+                            }
                             tr.appendChild(td);
                         }
                         tbody.appendChild(tr);
@@ -2564,9 +2824,15 @@ PO;TO;SR;ČE;PE;SO;NE
                     copyBtn.textContent = "Kopiraj tabelo";
                     copyBtn.style.marginTop = "10px";
                     copyBtn.addEventListener("click", async () => {
-                        const tsv = Array.from(matrixTable.querySelectorAll("tbody tr"))
-                            .map(tr => Array.from(tr.querySelectorAll("input")).map(input => input.value || "").join("\t"))
-                            .join("\n");
+                        const tsv = Array.from({ length: rows }, (_, rowIndex) =>
+                            Array.from({ length: cols }, (_, colIndex) => {
+                                const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                                const el = matrixTable.querySelector(selector);
+                                if (!el) return "";
+                                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
+                                return el.textContent || "";
+                            }).join("\t")
+                        ).join("\n");
                         try {
                             await navigator.clipboard.writeText(tsv);
                             alert("Tabela kopirana v odložišče.");
