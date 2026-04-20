@@ -699,13 +699,18 @@ Lep pozdrav
                         <div class="btns" style="margin-top:8px;">
                             <button id="matrixBuildBtn" type="button">Ustvari / posodobi tabelo</button>
                             <button id="matrixCsvImportBtn" type="button">Uvozi CSV</button>
-                            <button id="matrixMergeBtn" type="button">Merge izbranih</button>
-                            <button id="matrixSplitBtn" type="button">Razdruži (split)</button>
-                            <button id="matrixReadonlyBtn" type="button">Toggle neureljivo</button>
-                            <button id="matrixClearSelBtn" type="button">Počisti izbor</button>
+                        </div>
+                        <div style="margin-top:8px; border:1px solid #dbe2ea; border-radius:10px; padding:10px; background:#f8fbff;">
+                            <label for="matrixMonthCount" style="margin-top:0;">Samodejna mesečna matrika</label>
+                            <input id="matrixMonthCount" type="text" value="1" placeholder="Npr. 3" />
+                            <div id="matrixMonthsPickerWrap" class="grid two" style="margin-top:6px;"></div>
+                            <div class="btns" style="margin-top:8px;">
+                                <button id="matrixGenerateCalendarBtn" type="button">Ustvari mesečni koledar</button>
+                            </div>
+                            <div class="hint">Izberi mesece (npr. oktober 2026, november 2026) in sistem pripravi vrstice: mesec, dan, dan v tednu, konfiguracija.</div>
                         </div>
                         <input id="matrixCsvInput" type="file" accept=".csv,text/csv" class="hidden" />
-                        <div id="matrixSelectionInfo" class="hint">Izbranih celic: 0</div>
+                        <div class="hint">DSL oznake v <strong>Predizpolnjene celice</strong>: <code>[m=N]</code> colspan, <code>[ro]</code> readonly, <code>[b]</code> bold, <code>[c]</code>/<code>[l]</code>/<code>[r]</code> poravnava, <code>[fs=N]</code> velikost pisave.</div>
                         <div id="matrixDesigner" class="matrix-designer"></div>
 
                         <details style="margin-top:8px;">
@@ -864,14 +869,12 @@ PO;TO;SR;ČE;PE;SO;NE
         const matrixReadonlyEl = document.getElementById("matrixReadonly");
         const matrixMergesEl = document.getElementById("matrixMerges");
         const matrixDesignerEl = document.getElementById("matrixDesigner");
-        const matrixSelectionInfoEl = document.getElementById("matrixSelectionInfo");
         const matrixBuildBtnEl = document.getElementById("matrixBuildBtn");
         const matrixCsvImportBtnEl = document.getElementById("matrixCsvImportBtn");
         const matrixCsvInputEl = document.getElementById("matrixCsvInput");
-        const matrixMergeBtnEl = document.getElementById("matrixMergeBtn");
-        const matrixSplitBtnEl = document.getElementById("matrixSplitBtn");
-        const matrixReadonlyBtnEl = document.getElementById("matrixReadonlyBtn");
-        const matrixClearSelBtnEl = document.getElementById("matrixClearSelBtn");
+        const matrixMonthCountEl = document.getElementById("matrixMonthCount");
+        const matrixMonthsPickerWrapEl = document.getElementById("matrixMonthsPickerWrap");
+        const matrixGenerateCalendarBtnEl = document.getElementById("matrixGenerateCalendarBtn");
         const questionListEl = document.getElementById("questionList");
         const sectionOverviewEl = document.getElementById("sectionOverview");
         const previewContainerEl = document.getElementById("previewContainer");
@@ -1057,6 +1060,157 @@ PO;TO;SR;ČE;PE;SO;NE
             }).join("\n");
         }
 
+        function getCurrentMonthInputValue(offset = 0) {
+            const now = new Date();
+            const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            return `${date.getFullYear()}-${month}`;
+        }
+
+        function renderMatrixMonthPickers() {
+            if (!matrixMonthsPickerWrapEl || !matrixMonthCountEl) return;
+            const count = Math.max(1, Math.min(12, parsePositiveInt(matrixMonthCountEl.value, 1)));
+            matrixMonthCountEl.value = String(count);
+            const currentValues = Array.from(matrixMonthsPickerWrapEl.querySelectorAll('input[type="month"]')).map(input => input.value);
+            matrixMonthsPickerWrapEl.innerHTML = "";
+            for (let i = 0; i < count; i += 1) {
+                const label = document.createElement("label");
+                label.textContent = `Mesec ${i + 1}`;
+                const input = document.createElement("input");
+                input.type = "month";
+                input.value = currentValues[i] || getCurrentMonthInputValue(i);
+                label.appendChild(input);
+                matrixMonthsPickerWrapEl.appendChild(label);
+            }
+        }
+
+        function getSloveneMonthTitle(year, monthIndex) {
+            const months = [
+                "JANUAR", "FEBRUAR", "MAREC", "APRIL", "MAJ", "JUNIJ",
+                "JULIJ", "AVGUST", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DECEMBER"
+            ];
+            return `${months[monthIndex]} ${year}`;
+        }
+
+        function getSloveneDayShort(dayIndex) {
+            const days = ["NE", "PO", "TO", "SR", "ČE", "PE", "SO"];
+            return days[dayIndex] || "";
+        }
+
+        function buildCalendarMatrixStateFromMonths(monthValues) {
+            const parsedMonths = monthValues.map((token) => {
+                const [yearRaw, monthRaw] = String(token || "").split("-");
+                const year = Number.parseInt(yearRaw, 10);
+                const month = Number.parseInt(monthRaw, 10);
+                if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+                    throw new Error("Izberi veljavne mesece (format LLLL-MM).");
+                }
+                return { year, month };
+            });
+
+            if (!parsedMonths.length) {
+                throw new Error("Dodaj vsaj en mesec za samodejno pripravo tabele.");
+            }
+
+            const maxDays = parsedMonths.reduce((max, item) => Math.max(max, new Date(item.year, item.month, 0).getDate()), 28);
+            const cols = maxDays + 1;
+            const rows = (parsedMonths.length * 5) - 1;
+            const preset = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+            const readonly = [];
+            const merges = [];
+            const styles = {};
+
+            const addReadonly = (row, col) => readonly.push({ row, col });
+            const addStyle = (row, col, style) => {
+                styles[`${row}:${col}`] = { ...(styles[`${row}:${col}`] || {}), ...style };
+            };
+
+            parsedMonths.forEach((item, monthBlockIndex) => {
+                const monthDays = new Date(item.year, item.month, 0).getDate();
+                const monthIdx = item.month - 1;
+                const topRow = monthBlockIndex * 5;
+
+                preset[topRow][0] = "mesec";
+                addReadonly(topRow, 0);
+                addStyle(topRow, 0, { align: "right" });
+
+                preset[topRow][1] = getSloveneMonthTitle(item.year, monthIdx);
+                addReadonly(topRow, 1);
+                addStyle(topRow, 1, { align: "center", bold: true, fontSize: 14 });
+                merges.push({ row: topRow, col: 1, rowspan: 1, colspan: monthDays });
+
+                preset[topRow + 1][0] = "dan";
+                addReadonly(topRow + 1, 0);
+                addStyle(topRow + 1, 0, { align: "right" });
+
+                preset[topRow + 2][0] = "";
+                addReadonly(topRow + 2, 0);
+
+                preset[topRow + 3][0] = "konfiguracija";
+                addReadonly(topRow + 3, 0);
+
+                for (let day = 1; day <= monthDays; day += 1) {
+                    const col = day;
+                    const dow = new Date(item.year, monthIdx, day).getDay();
+                    preset[topRow + 1][col] = String(day);
+                    preset[topRow + 2][col] = getSloveneDayShort(dow);
+                    addReadonly(topRow + 1, col);
+                    addReadonly(topRow + 2, col);
+                    addStyle(topRow + 1, col, { align: "center" });
+                    addStyle(topRow + 2, col, { align: "center", bold: true });
+                }
+
+                for (let col = monthDays + 1; col < cols; col += 1) {
+                    addReadonly(topRow, col);
+                    addReadonly(topRow + 1, col);
+                    addReadonly(topRow + 2, col);
+                    addReadonly(topRow + 3, col);
+                }
+
+                if (monthBlockIndex < parsedMonths.length - 1) {
+                    const spacerRow = topRow + 4;
+                    for (let col = 0; col < cols; col += 1) {
+                        addReadonly(spacerRow, col);
+                    }
+                }
+            });
+
+            const dedupReadonly = Array.from(new Map(readonly.map(cell => [`${cell.row}:${cell.col}`, cell])).values());
+            const widths = cols > 1 ? [12, ...Array.from({ length: cols - 1 }, () => 88 / (cols - 1))] : [100];
+
+            return {
+                rows,
+                cols,
+                preset,
+                colWidths: normalizeColumnWidths(widths, cols),
+                styles,
+                readonly: dedupReadonly,
+                merges,
+                selected: new Set()
+            };
+        }
+
+        function generateCalendarMatrixFromInputs() {
+            if (!matrixMonthsPickerWrapEl) return;
+            const monthValues = Array.from(matrixMonthsPickerWrapEl.querySelectorAll('input[type="month"]'))
+                .map(input => input.value)
+                .filter(Boolean);
+
+            if (!monthValues.length) {
+                setStatus("Najprej izberi vsaj en mesec.");
+                return;
+            }
+
+            try {
+                matrixDesignerState = buildCalendarMatrixStateFromMonths(monthValues);
+                matrixSelectionAnchor = null;
+                renderMatrixDesigner();
+                setStatus(`Mesečna matrika pripravljena (${matrixDesignerState.rows} x ${matrixDesignerState.cols}).`);
+            } catch (err) {
+                setStatus(err?.message || "Priprava mesečne matrike ni uspela.");
+            }
+        }
+
         function splitCoordinateTokens(value) {
             return String(value || "")
                 .split(/[\n;]+/)
@@ -1214,6 +1368,7 @@ PO;TO;SR;ČE;PE;SO;NE
         function getMatrixStateFromInputs() {
             const rows = Math.max(1, parsePositiveInt(matrixRowsEl.value, 1));
             const cols = Math.max(1, parsePositiveInt(matrixColsEl.value, 1));
+            const dslParsed = parseMatrixDslPreset(matrixPresetEl.value, rows, cols);
             let readonly = [];
             let merges = [];
             try {
@@ -1223,8 +1378,9 @@ PO;TO;SR;ČE;PE;SO;NE
                 merges = parseMatrixMerges(matrixMergesEl.value);
             } catch {}
 
+            const combinedMerges = [...merges, ...(dslParsed.merges || [])];
             try {
-                const { masterMap } = buildMatrixMergeIndex(rows, cols, merges);
+                const { masterMap } = buildMatrixMergeIndex(rows, cols, combinedMerges);
                 merges = Array.from(masterMap.entries()).map(([key, span]) => {
                     const [row, col] = key.split(":").map(Number);
                     return { row, col, rowspan: span.rowspan, colspan: span.colspan };
@@ -1236,10 +1392,10 @@ PO;TO;SR;ČE;PE;SO;NE
             return {
                 rows,
                 cols,
-                preset: parseMatrixPreset(matrixPresetEl.value, rows, cols),
+                preset: dslParsed.preset,
                 colWidths: parseMatrixColumnWidths(matrixColWidthsEl.value, cols),
-                styles: {},
-                readonly,
+                styles: dslParsed.styles || {},
+                readonly: Array.from(new Map([...readonly, ...(dslParsed.readonly || [])].map(cell => [cell.row + ":" + cell.col, cell])).values()),
                 merges,
                 selected: new Set()
             };
@@ -1330,16 +1486,14 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         function renderMatrixDesigner() {
-            if (!matrixDesignerEl || !matrixSelectionInfoEl) return;
+            if (!matrixDesignerEl) return;
             if (!matrixDesignerState) {
                 matrixDesignerEl.innerHTML = "<div class='hint'>Najprej ustvari matriko.</div>";
-                matrixSelectionInfoEl.textContent = "Izbranih celic: 0";
                 return;
             }
 
             const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
             const { skipMap, masterMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
-            const selected = matrixDesignerState.selected || new Set();
 
             const table = document.createElement("table");
             table.className = "matrix-table";
@@ -1363,10 +1517,6 @@ PO;TO;SR;ČE;PE;SO;NE
                     const td = document.createElement("td");
                     td.dataset.matrixRow = String(row);
                     td.dataset.matrixCol = String(col);
-
-                    if (selected.has(key)) {
-                        td.classList.add("matrix-selected-cell");
-                    }
                     const span = masterMap.get(key);
                     if (span?.rowspan > 1) td.rowSpan = span.rowspan;
                     if (span?.colspan > 1) td.colSpan = span.colspan;
@@ -1375,71 +1525,15 @@ PO;TO;SR;ČE;PE;SO;NE
                         td.classList.add("matrix-readonly-cell");
                     }
 
-                    td.addEventListener("click", (event) => {
-                        event.preventDefault();
-                        setMatrixSelection(key, event.ctrlKey || event.metaKey, event.shiftKey);
-                        renderMatrixDesigner();
-                    });
-
-                    const input = document.createElement("input");
-                    input.type = "text";
-                    input.value = String(matrixDesignerState.preset?.[row]?.[col] || "");
-                    input.addEventListener("click", (event) => event.stopPropagation());
-                    input.addEventListener("input", () => {
-                        matrixDesignerState.preset[row][col] = input.value || "";
-                        syncMatrixStateToInputs();
-                    });
-                    td.appendChild(input);
-
-                    if (row === 0) {
-                        const span = masterMap.get(key);
-                        const boundaryCol = col + ((span?.colspan || 1) - 1);
-                        if (boundaryCol < matrixDesignerState.cols - 1) {
-                            const resizer = document.createElement("div");
-                            resizer.className = "matrix-col-resizer";
-                            resizer.addEventListener("mousedown", (event) => {
-                                event.preventDefault();
-                                event.stopPropagation();
-
-                                const startX = event.clientX;
-                                const tableRect = table.getBoundingClientRect();
-                                const startWidths = [...matrixDesignerState.colWidths];
-                                const leftCol = boundaryCol;
-                                const rightCol = boundaryCol + 1;
-                                const minPct = 3;
-
-                                const onMouseMove = (moveEvent) => {
-                                    const deltaPx = moveEvent.clientX - startX;
-                                    const deltaPct = (deltaPx / Math.max(tableRect.width, 1)) * 100;
-                                    let leftWidth = startWidths[leftCol] + deltaPct;
-                                    let rightWidth = startWidths[rightCol] - deltaPct;
-
-                                    if (leftWidth < minPct) {
-                                        rightWidth -= (minPct - leftWidth);
-                                        leftWidth = minPct;
-                                    }
-                                    if (rightWidth < minPct) {
-                                        leftWidth -= (minPct - rightWidth);
-                                        rightWidth = minPct;
-                                    }
-                                    if (leftWidth < minPct || rightWidth < minPct) return;
-
-                                    matrixDesignerState.colWidths[leftCol] = leftWidth;
-                                    matrixDesignerState.colWidths[rightCol] = rightWidth;
-                                    renderMatrixDesigner();
-                                };
-
-                                const onMouseUp = () => {
-                                    window.removeEventListener("mousemove", onMouseMove);
-                                    window.removeEventListener("mouseup", onMouseUp);
-                                };
-
-                                window.addEventListener("mousemove", onMouseMove);
-                                window.addEventListener("mouseup", onMouseUp);
-                            });
-                            td.appendChild(resizer);
-                        }
-                    }
+                    const value = String(matrixDesignerState.preset?.[row]?.[col] || "");
+                    const styleMeta = matrixDesignerState.styles?.[key] || {};
+                    const content = document.createElement("div");
+                    content.className = "preserve-wrap";
+                    content.textContent = value;
+                    if (styleMeta.align) content.style.textAlign = styleMeta.align;
+                    if (styleMeta.bold) content.style.fontWeight = "700";
+                    if (styleMeta.fontSize) content.style.fontSize = String(styleMeta.fontSize) + "px";
+                    td.appendChild(content);
 
                     tr.appendChild(td);
                 }
@@ -1449,7 +1543,6 @@ PO;TO;SR;ČE;PE;SO;NE
             table.appendChild(tbody);
             matrixDesignerEl.innerHTML = "";
             matrixDesignerEl.appendChild(table);
-            matrixSelectionInfoEl.textContent = `Izbranih celic: ${selected.size}`;
             syncMatrixStateToInputs();
         }
 
@@ -1664,6 +1757,8 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixPresetEl.value = "";
             matrixReadonlyEl.value = "";
             matrixMergesEl.value = "";
+            if (matrixMonthCountEl) matrixMonthCountEl.value = "1";
+            renderMatrixMonthPickers();
             matrixDesignerState = null;
             matrixSelectionAnchor = null;
             childFieldsEl.classList.add("hidden");
@@ -1777,6 +1872,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
 
         updateChildTypeUI();
+        renderMatrixMonthPickers();
 
         async function getQuestionFromForm() {
             const text = qTextEl.innerHTML.trim();
@@ -3875,17 +3971,8 @@ PO;TO;SR;ČE;PE;SO;NE
             }
             if (event?.target) event.target.value = "";
         });
-        on(matrixMergeBtnEl, "click", mergeSelectedMatrixCells);
-        on(matrixSplitBtnEl, "click", splitSelectedMatrixCells);
-        on(matrixReadonlyBtnEl, "click", toggleReadonlySelectedCells);
-        on(matrixClearSelBtnEl, "click", () => {
-            if (matrixDesignerState) {
-                matrixDesignerState.selected = new Set();
-                matrixSelectionAnchor = null;
-                renderMatrixDesigner();
-            }
-        });
-
+        on(matrixMonthCountEl, "input", renderMatrixMonthPickers);
+        on(matrixGenerateCalendarBtnEl, "click", generateCalendarMatrixFromInputs);
         on(surveyPeriodEl, "input", renderPreview);
         on(surveyTitleEl, "input", renderPreview);
         on(surveySubtitleEl, "input", renderPreview);
