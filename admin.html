@@ -162,6 +162,48 @@
             .checkbox-row input {
                 margin: 0;
             }
+        .date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+    .date-field label {
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+    }
+    
+    .date-field input[type="date"] {
+        width: 100%;
+        padding: 12px 14px;
+        font: inherit;
+        color: #1f2937;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 14px;
+        outline: none;
+        transition: all 0.18s ease;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    
+    .date-field input[type="date"]:hover {
+        border-color: #94a3b8;
+    }
+    
+    .date-field input[type="date"]:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+    }
+    
+    .date-field input[type="date"]::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    
+    .date-field input[type="date"]::-webkit-calendar-picker-indicator:hover {
+        opacity: 1;
+    }
 
         .btns {
             display: flex;
@@ -628,6 +670,23 @@ Lep pozdrav
                 </div>
                 </div>
 
+                 <div class="panel">
+                    <div class="section">
+                        <h2>Deli ankete</h2>
+                        <label for="sectionTitle">Naslov dela</label>
+                        <input id="sectionTitle" type="text" placeholder="npr. Del 1" />
+                        <label for="sectionDescription">Opis dela</label>
+                        <textarea id="sectionDescription" placeholder="Kratek opis dela"></textarea>
+                        <label for="sectionColor">Barva dela</label>
+                        <input id="sectionColor" type="color" value="#eef2ff" style="width:56px; padding:3px;" />
+                        <div class="btns">
+                            <button id="saveSectionBtn" type="button" class="btn-primary">Dodaj del</button>
+                            <button id="resetSectionBtn" type="button">Počisti del</button>
+                        </div>
+                        <div id="sectionOverview" class="question-list" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+
                 <div class="panel">
                 <div class="section">
                     <h2>Dodaj vprašanje</h2>
@@ -752,22 +811,6 @@ PO;TO;SR;ČE;PE;SO;NE
                 </div>
                 </div>
 
-                <div class="panel">
-                    <div class="section">
-                        <h2>Deli ankete</h2>
-                        <label for="sectionTitle">Naslov dela</label>
-                        <input id="sectionTitle" type="text" placeholder="npr. Del 1" />
-                        <label for="sectionDescription">Opis dela</label>
-                        <textarea id="sectionDescription" placeholder="Kratek opis dela"></textarea>
-                        <label for="sectionColor">Barva dela</label>
-                        <input id="sectionColor" type="color" value="#eef2ff" style="width:56px; padding:3px;" />
-                        <div class="btns">
-                            <button id="saveSectionBtn" type="button" class="btn-primary">Dodaj del</button>
-                            <button id="resetSectionBtn" type="button">Počisti del</button>
-                        </div>
-                        <div id="sectionOverview" class="question-list" style="margin-top:10px;"></div>
-                    </div>
-                </div>
 
                 <div class="panel">
                 <div class="section">
@@ -2307,10 +2350,10 @@ PO;TO;SR;ČE;PE;SO;NE
                     <label>Ime in priimek</label>
                     <input type="text" placeholder="Vpiši ime in priimek" />
                 </div>
-                <div>
-                    <label>Datum</label>
-                    <input type="text" placeholder="Npr. 18. 3. 2026" />
-                </div>
+        		<div class="date-field">
+            			<label for="surveyDate">Datum</label>
+            			<input id="surveyDate" type="date" />
+        		</div>
                 <div>
                     <label>Enota</label>
                     <select>
@@ -2851,6 +2894,48 @@ PO;TO;SR;ČE;PE;SO;NE
             background: #f3f6fb;
         }
 
+        .date-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .date-field label {
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0;
+        }
+        
+        .date-field input[type="date"] {
+            width: 100%;
+            padding: 12px 14px;
+            font: inherit;
+            color: #1f2937;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 14px;
+            outline: none;
+            transition: all 0.18s ease;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        
+        .date-field input[type="date"]:hover {
+            border-color: #94a3b8;
+        }
+        
+        .date-field input[type="date"]:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+        
+        .date-field input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        
+        .date-field input[type="date"]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+        }
         .btns {
             display: flex;
             gap: 10px;
@@ -3014,7 +3099,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     <input id="personName" type="text" />
                 </div>
 
-                <div>
+            <div class="date-field">
                     <label for="surveyDate">Datum</label>
                     <input id="surveyDate" type="date" />
                 </div>
@@ -4041,6 +4126,25 @@ PO;TO;SR;ČE;PE;SO;NE
 
         document.addEventListener("input", (event) => {
             if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            try {
+                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
+            } catch {}
+        });
+
+        window.addEventListener("message", (event) => {
+            const payload = event?.data;
+            if (!payload || payload.type !== "matrix-editor-save") return;
+            const card = document.querySelector('#surveyContainer .section-question-card[data-question-index="' + Number(payload.questionIndex) + '"]');
+            if (!card) return;
+            const rows = Number(card.dataset.matrixRows || 1);
+            const cols = Number(card.dataset.matrixCols || 1);
+            setMatrixCardValues(card, rows, cols, payload.rows || []);
+            if (typeof payload.csv === "string" && payload.csv.trim()) {
+                MATRIX_CSV_ATTACHMENTS.set(Number(payload.questionIndex), {
+                    csv: payload.csv,
+                    fileName: "Matrika-" + Number(payload.questionIndex + 1) + ".csv"
+                });
+            }
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
             } catch {}
