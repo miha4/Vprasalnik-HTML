@@ -2882,12 +2882,6 @@ PO;TO;SR;ČE;PE;SO;NE
             background: #fff;
             font-weight: 400;
         }
-        
-        .subtitle {
-    font-size: 12px;
-    color: #6b7280;
-    margin-top: 4px;
-}
 
         th, td {
             border: 1px solid #cfd8e3;
@@ -3667,13 +3661,13 @@ PO;TO;SR;ČE;PE;SO;NE
                 "<title>Matrika - celo okno</title>" +
                 "<style>body{margin:0;font-family:Arial,sans-serif;background:#eef3f8}" +
                 ".topbar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #cfd8e3;padding:10px;display:flex;gap:8px;align-items:center}" +
-                ".topbar .title{font-weight:700;margin-right:auto}.btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
+                ".topbar .title-wrap{margin-right:auto}.topbar .title{font-weight:700}.topbar .subtitle{font-size:12px;color:#475569;margin-top:4px}" +
+                ".btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
                 "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
                 "input,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent}.cell-text{white-space:pre-wrap}</style>" +
-                "</head><body><div class='topbar'><div class='title'>MUŠTER ZA KONFIGURACIJE</div>" +
-                "<div class='subtitle'> Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila </div>" +
-                "</div>" +
+                "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>Matrika (ležeči prikaz)</div>" +
+                "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
                 "</div><div class='wrap'><div class='scroll' id='matrixHost'></div></div></body></html>"
             );
