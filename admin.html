@@ -569,6 +569,51 @@
             font-weight: 400;
         }
 
+        .matrix-print-appendix {
+            margin-top: 16px;
+        }
+
+        .matrix-print-entry {
+            margin-top: 12px;
+            border: 1px solid #d0d7de;
+            border-radius: 10px;
+            padding: 10px;
+            background: #fff;
+            break-inside: avoid;
+        }
+
+        .matrix-print-title {
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .matrix-print-wrap {
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .matrix-print-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin-top: 0;
+        }
+
+        .matrix-print-table td {
+            border: 1px solid #d0d7de;
+            padding: 2px 4px;
+            vertical-align: middle;
+            font-size: 10px;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .matrix-print-cell {
+            white-space: pre-wrap;
+            width: 100%;
+            text-align: center;
+        }
+
         th, td {
             border: 1px solid #cfd8e3;
             padding: 8px;
@@ -3088,6 +3133,15 @@ PO;TO;SR;ČE;PE;SO;NE
             .print-hidden-temp {
                 display: none !important;
             }
+
+            .matrix-print-appendix {
+                break-before: page;
+            }
+
+            .matrix-print-table td {
+                font-size: 9px;
+                padding: 1px 3px;
+            }
         }
     </style>
 </head>
@@ -3132,6 +3186,7 @@ PO;TO;SR;ČE;PE;SO;NE
         </div>
 
         <div id="surveyContainer"></div>
+        <div id="matrixPrintAppendix" class="card matrix-print-appendix hidden"></div>
 
         <div class="card no-print">
             <div class="btns main-actions">
@@ -3905,6 +3960,91 @@ PO;TO;SR;ČE;PE;SO;NE
             return card;
         }
 
+        function renderMatrixPrintAppendix() {
+            const appendix = document.getElementById("matrixPrintAppendix");
+            if (!appendix) return;
+
+            const visibleQuestions = getVisibleQuestionConfigs();
+            const matrixItems = visibleQuestions
+                .map((q, index) => ({ q, index }))
+                .filter(item => item.q?.type === "matrix_table");
+
+            if (!matrixItems.length) {
+                appendix.classList.add("hidden");
+                appendix.innerHTML = "";
+                return;
+            }
+
+            appendix.classList.remove("hidden");
+            appendix.innerHTML = "<div class='question-title'>MUŠET ZA KONFIGURACIJE</div>";
+
+            matrixItems.forEach(({ q, index }, matrixIndex) => {
+                const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                const styles = q.matrix && typeof q.matrix.styles === "object" && q.matrix.styles !== null ? q.matrix.styles : {};
+                const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
+                const current = ensureMatrixEditorState(index, q);
+                const values = normalizeMatrixRows(current.rows, rows, cols, getMatrixInitialRows(q, rows, cols));
+
+                const mergeMaster = new Map();
+                const mergeSkip = new Set();
+                merges.forEach((m) => {
+                    const row = Number(m.row);
+                    const col = Number(m.col);
+                    const rowspan = Number(m.rowspan || 1);
+                    const colspan = Number(m.colspan || 1);
+                    if (!Number.isFinite(row) || !Number.isFinite(col) || row < 0 || col < 0 || rowspan <= 0 || colspan <= 0) return;
+                    if (row + rowspan > rows || col + colspan > cols) return;
+                    const key = row + ":" + col;
+                    if (mergeMaster.has(key)) return;
+                    mergeMaster.set(key, { rowspan, colspan });
+                    for (let r = row; r < row + rowspan; r += 1) {
+                        for (let c = col; c < col + colspan; c += 1) {
+                            if (r === row && c === col) continue;
+                            mergeSkip.add(r + ":" + c);
+                        }
+                    }
+                });
+
+                const entry = document.createElement("div");
+                entry.className = "matrix-print-entry";
+                entry.innerHTML = "<div class='matrix-print-title'>Tabela konfiguracij " + (matrixIndex + 1) + "</div>";
+
+                const wrap = document.createElement("div");
+                wrap.className = "matrix-print-wrap";
+                const table = document.createElement("table");
+                table.className = "matrix-print-table";
+                const tbody = document.createElement("tbody");
+
+                for (let row = 0; row < rows; row += 1) {
+                    const tr = document.createElement("tr");
+                    for (let col = 0; col < cols; col += 1) {
+                        const key = row + ":" + col;
+                        if (mergeSkip.has(key)) continue;
+                        const td = document.createElement("td");
+                        const span = mergeMaster.get(key);
+                        if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                        if (span?.colspan > 1) td.colSpan = span.colspan;
+                        const styleMeta = styles[key] || {};
+                        const content = document.createElement("div");
+                        content.className = "matrix-print-cell";
+                        content.textContent = String(values?.[row]?.[col] || "");
+                        if (styleMeta.align) content.style.textAlign = styleMeta.align;
+                        if (styleMeta.bold) content.style.fontWeight = "700";
+                        if (styleMeta.fontSize) content.style.fontSize = String(Math.max(8, Number(styleMeta.fontSize) - 2)) + "px";
+                        td.appendChild(content);
+                        tr.appendChild(td);
+                    }
+                    tbody.appendChild(tr);
+                }
+
+                table.appendChild(tbody);
+                wrap.appendChild(table);
+                entry.appendChild(wrap);
+                appendix.appendChild(entry);
+            });
+        }
+
         function renderSurvey() {
             const unitSelect = document.getElementById("surveyUnit");
 
@@ -4203,6 +4343,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 sectionShell.appendChild(renderSectionActions(sectionNumber));
                 container.appendChild(sectionShell);
             });
+
+            renderMatrixPrintAppendix();
         }
 
         document.getElementById("surveyUnit").addEventListener("change", () => {
