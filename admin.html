@@ -3141,6 +3141,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
         const DRAFT_SAVE_HANDLES = new Map();
         let DRAFT_DIRECTORY_HANDLE = null;
+        let PRINT_DIRECTORY_HANDLE = null;
         const MATRIX_CSV_ATTACHMENTS = new Map();
         const MATRIX_EDITOR_STATE = new Map();
 
@@ -3355,6 +3356,29 @@ PO;TO;SR;ČE;PE;SO;NE
                     csv: matrixValuesToCsv(values)
                 };
             });
+        }
+
+        async function choosePrintOutputDirectory() {
+            if (!window.showDirectoryPicker) return null;
+            try {
+                const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+                PRINT_DIRECTORY_HANDLE = handle;
+                return handle;
+            } catch (err) {
+                if (err?.name === "AbortError") return null;
+                throw err;
+            }
+        }
+
+        async function saveCsvArtifactsToDirectory(directoryHandle) {
+            const csvArtifacts = getCurrentMatrixCsvArtifacts();
+            for (const artifact of csvArtifacts) {
+                const csvHandle = await directoryHandle.getFileHandle(artifact.fileName, { create: true });
+                const csvWritable = await csvHandle.createWritable();
+                await csvWritable.write(artifact.csv);
+                await csvWritable.close();
+            }
+            return csvArtifacts.length;
         }
 
         function getVisibleQuestionConfigs() {
@@ -3820,13 +3844,21 @@ PO;TO;SR;ČE;PE;SO;NE
             });
         }
 
-        function printAndMail() {
+        async function printAndMail() {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
 
-            const csvCount = downloadMatrixCsvAttachments();
-            if (csvCount > 0) {
-                alert("Prenesenih je bilo " + csvCount + " CSV prilog. Priložite jih skupaj s PDF v email.");
+            try {
+                const directoryHandle = await choosePrintOutputDirectory();
+                if (!directoryHandle) return;
+                const csvCount = await saveCsvArtifactsToDirectory(directoryHandle);
+                if (csvCount > 0) {
+                    alert("CSV konfiguracije (" + csvCount + ") so shranjene v izbrano mapo. V naslednjem koraku PDF shrani v isto mapo.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("CSV datotek ni bilo mogoče shraniti v izbrano mapo.");
+                return;
             }
 
             const mailOpened = openMailClient();
@@ -3836,7 +3868,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
             if (mailOpened) {
                 setTimeout(() => {
-                    alert("PDF pripni ročno v email. Brskalnik zaradi varnosti ne more samodejno priložiti lokalno shranjenega PDF-ja.");
+                    alert("PDF in CSV morate ročno priložiti v email. Brskalnik zaradi varnosti tega ne more narediti samodejno.");
                 }, 700);
             }
         }
@@ -4178,31 +4210,20 @@ PO;TO;SR;ČE;PE;SO;NE
             } catch {}
         });
 
-        window.addEventListener("message", (event) => {
-            const payload = event?.data;
-            if (!payload || payload.type !== "matrix-editor-save") return;
-            const card = document.querySelector('#surveyContainer .section-question-card[data-question-index="' + Number(payload.questionIndex) + '"]');
-            if (!card) return;
-            const rows = Number(card.dataset.matrixRows || 1);
-            const cols = Number(card.dataset.matrixCols || 1);
-            setMatrixCardValues(card, rows, cols, payload.rows || []);
-            if (typeof payload.csv === "string" && payload.csv.trim()) {
-                MATRIX_CSV_ATTACHMENTS.set(Number(payload.questionIndex), {
-                    csv: payload.csv,
-                    fileName: "Matrika-" + Number(payload.questionIndex + 1) + ".csv"
-                });
-            }
-            try {
-                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-            } catch {}
-        });
-
-        document.getElementById("printPdfBtn").addEventListener("click", () => {
+        document.getElementById("printPdfBtn").addEventListener("click", async () => {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
-            const csvCount = downloadMatrixCsvAttachments();
-            if (csvCount > 0) {
-                alert("Prenesenih je bilo " + csvCount + " CSV prilog. Dodajte jih k PDF dokumentu.");
+            try {
+                const directoryHandle = await choosePrintOutputDirectory();
+                if (!directoryHandle) return;
+                const csvCount = await saveCsvArtifactsToDirectory(directoryHandle);
+                if (csvCount > 0) {
+                    alert("CSV konfiguracije (" + csvCount + ") so shranjene v izbrano mapo. V print oknu shrani PDF v isto mapo.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("CSV datotek ni bilo mogoče shraniti v izbrano mapo.");
+                return;
             }
             window.print();
         });
@@ -4210,22 +4231,38 @@ PO;TO;SR;ČE;PE;SO;NE
         document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
 
-        document.addEventListener("click", (event) => {
+        document.addEventListener("click", async (event) => {
             const btn = event.target.closest("[data-section-action]");
             if (!btn) return;
             const sectionIndex = Number(btn.dataset.section);
             const action = btn.dataset.sectionAction;
 
             if (action === "print") {
-                const csvCount = downloadMatrixCsvAttachments();
-                if (csvCount > 0) {
-                    alert("Prenesenih je bilo " + csvCount + " CSV prilog. Dodajte jih k PDF dokumentu.");
+                try {
+                    const directoryHandle = await choosePrintOutputDirectory();
+                    if (!directoryHandle) return;
+                    const csvCount = await saveCsvArtifactsToDirectory(directoryHandle);
+                    if (csvCount > 0) {
+                        alert("CSV konfiguracije (" + csvCount + ") so shranjene v izbrano mapo. V print oknu shrani PDF v isto mapo.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert("CSV datotek ni bilo mogoče shraniti v izbrano mapo.");
+                    return;
                 }
                 printSection(sectionIndex);
             } else if (action === "mail") {
-                const csvCount = downloadMatrixCsvAttachments();
-                if (csvCount > 0) {
-                    alert("Prenesenih je bilo " + csvCount + " CSV prilog. Priložite jih skupaj s PDF v email.");
+                try {
+                    const directoryHandle = await choosePrintOutputDirectory();
+                    if (!directoryHandle) return;
+                    const csvCount = await saveCsvArtifactsToDirectory(directoryHandle);
+                    if (csvCount > 0) {
+                        alert("CSV konfiguracije (" + csvCount + ") so shranjene v izbrano mapo. V print oknu shrani PDF v isto mapo.");
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert("CSV datotek ni bilo mogoče shraniti v izbrano mapo.");
+                    return;
                 }
                 const mailOpened = openMailClient();
                 if (mailOpened) {
