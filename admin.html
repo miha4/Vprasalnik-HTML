@@ -162,6 +162,48 @@
             .checkbox-row input {
                 margin: 0;
             }
+        .date-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+    .date-field label {
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+    }
+    
+    .date-field input[type="date"] {
+        width: 100%;
+        padding: 12px 14px;
+        font: inherit;
+        color: #1f2937;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 14px;
+        outline: none;
+        transition: all 0.18s ease;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    
+    .date-field input[type="date"]:hover {
+        border-color: #94a3b8;
+    }
+    
+    .date-field input[type="date"]:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+    }
+    
+    .date-field input[type="date"]::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+        opacity: 0.7;
+    }
+    
+    .date-field input[type="date"]::-webkit-calendar-picker-indicator:hover {
+        opacity: 1;
+    }
 
         .btns {
             display: flex;
@@ -628,6 +670,23 @@ Lep pozdrav
                 </div>
                 </div>
 
+                 <div class="panel">
+                    <div class="section">
+                        <h2>Deli ankete</h2>
+                        <label for="sectionTitle">Naslov dela</label>
+                        <input id="sectionTitle" type="text" placeholder="npr. Del 1" />
+                        <label for="sectionDescription">Opis dela</label>
+                        <textarea id="sectionDescription" placeholder="Kratek opis dela"></textarea>
+                        <label for="sectionColor">Barva dela</label>
+                        <input id="sectionColor" type="color" value="#eef2ff" style="width:56px; padding:3px;" />
+                        <div class="btns">
+                            <button id="saveSectionBtn" type="button" class="btn-primary">Dodaj del</button>
+                            <button id="resetSectionBtn" type="button">Počisti del</button>
+                        </div>
+                        <div id="sectionOverview" class="question-list" style="margin-top:10px;"></div>
+                    </div>
+                </div>
+
                 <div class="panel">
                 <div class="section">
                     <h2>Dodaj vprašanje</h2>
@@ -752,22 +811,6 @@ PO;TO;SR;ČE;PE;SO;NE
                 </div>
                 </div>
 
-                <div class="panel">
-                    <div class="section">
-                        <h2>Deli ankete</h2>
-                        <label for="sectionTitle">Naslov dela</label>
-                        <input id="sectionTitle" type="text" placeholder="npr. Del 1" />
-                        <label for="sectionDescription">Opis dela</label>
-                        <textarea id="sectionDescription" placeholder="Kratek opis dela"></textarea>
-                        <label for="sectionColor">Barva dela</label>
-                        <input id="sectionColor" type="color" value="#eef2ff" style="width:56px; padding:3px;" />
-                        <div class="btns">
-                            <button id="saveSectionBtn" type="button" class="btn-primary">Dodaj del</button>
-                            <button id="resetSectionBtn" type="button">Počisti del</button>
-                        </div>
-                        <div id="sectionOverview" class="question-list" style="margin-top:10px;"></div>
-                    </div>
-                </div>
 
                 <div class="panel">
                 <div class="section">
@@ -911,6 +954,732 @@ PO;TO;SR;ČE;PE;SO;NE
                 .split(";")
                 .map(x => x.trim())
                 .filter(Boolean);
+        }
+
+        function parsePositiveInt(value, fallback) {
+            const parsed = Number.parseInt(String(value || "").trim(), 10);
+            if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+            return parsed;
+        }
+
+        function getDefaultColumnWidths(cols) {
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            const base = 100 / safeCols;
+            return Array.from({ length: safeCols }, () => base);
+        }
+
+        function normalizeColumnWidths(widths, cols) {
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            const source = Array.isArray(widths) ? widths : [];
+            const normalized = Array.from({ length: safeCols }, (_, i) => {
+                const value = Number(source[i]);
+                return Number.isFinite(value) && value > 0 ? value : (100 / safeCols);
+            });
+
+            const sum = normalized.reduce((acc, v) => acc + v, 0) || 1;
+            return normalized.map(v => (v / sum) * 100);
+        }
+
+        function parseMatrixPreset(value, rows, cols) {
+            const lines = String(value || "")
+                .split(/\r?\n/)
+                .map(line => line.trim());
+
+            const matrix = [];
+            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                const line = lines[rowIndex] || "";
+                const cells = line
+                    ? line.split(/[;\t]/).map(cell => cell.trim())
+                    : [];
+
+                const row = [];
+                for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                    row.push(cells[colIndex] || "");
+                }
+                matrix.push(row);
+            }
+            return matrix;
+        }
+
+        function parseMatrixColumnWidths(value, cols) {
+            const tokens = String(value || "")
+                .split(";")
+                .map(x => Number(x.trim()))
+                .filter(v => Number.isFinite(v) && v > 0);
+            if (!tokens.length) return getDefaultColumnWidths(cols);
+            return normalizeColumnWidths(tokens, cols);
+        }
+
+        function parseMatrixDslPreset(value, rows, cols) {
+            const matrix = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+            const merges = [];
+            const readonly = [];
+            const styles = {};
+            const lines = String(value || "").split(/\r?\n/);
+
+            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                const cells = String(lines[rowIndex] || "").split(/[;\t]/);
+                let colIndex = 0;
+
+                for (const rawCell of cells) {
+                    if (colIndex >= cols) break;
+                    let remaining = String(rawCell || "").trimStart();
+                    const style = {};
+                    let colspan = 1;
+                    let isReadonly = false;
+
+                    while (remaining.startsWith("[")) {
+                        const end = remaining.indexOf("]");
+                        if (end < 0) break;
+                        const tag = remaining.slice(1, end).trim();
+                        remaining = remaining.slice(end + 1);
+
+                        tag.split("|").map(x => x.trim()).filter(Boolean).forEach((token) => {
+                            if (token === "ro") isReadonly = true;
+                            else if (token === "b") style.bold = true;
+                            else if (token === "c") style.align = "center";
+                            else if (token === "l") style.align = "left";
+                            else if (token === "r") style.align = "right";
+                            else if (token.startsWith("fs=")) {
+                                const fs = Number.parseInt(token.slice(3), 10);
+                                if (Number.isFinite(fs) && fs > 0) style.fontSize = fs;
+                            } else if (token.startsWith("m=")) {
+                                const m = Number.parseInt(token.slice(2), 10);
+                                if (Number.isFinite(m) && m > 0) colspan = m;
+                            }
+                        });
+                    }
+
+                    colspan = Math.max(1, Math.min(colspan, cols - colIndex));
+                    matrix[rowIndex][colIndex] = remaining.trim();
+
+                    if (colspan > 1) {
+                        merges.push({ row: rowIndex, col: colIndex, rowspan: 1, colspan });
+                    }
+                    if (isReadonly) {
+                        readonly.push({ row: rowIndex, col: colIndex });
+                    }
+                    if (Object.keys(style).length > 0) {
+                        styles[rowIndex + ":" + colIndex] = style;
+                    }
+
+                    colIndex += colspan;
+                }
+            }
+
+            return { preset: matrix, merges, readonly, styles };
+        }
+
+        function matrixToPresetText(matrix, rows, cols) {
+            const safeRows = parsePositiveInt(rows, 1);
+            const safeCols = parsePositiveInt(cols, 1);
+            const normalized = Array.isArray(matrix) ? matrix : [];
+
+            return Array.from({ length: safeRows }, (_, rowIndex) => {
+                const row = Array.isArray(normalized[rowIndex]) ? normalized[rowIndex] : [];
+                return Array.from({ length: safeCols }, (_, colIndex) => String(row[colIndex] || "")).join(";");
+            }).join("\n");
+        }
+
+        function getCurrentMonthInputValue(offset = 0) {
+            const now = new Date();
+            const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            return `${date.getFullYear()}-${month}`;
+        }
+
+        function renderMatrixMonthPickers() {
+            if (!matrixMonthsPickerWrapEl || !matrixMonthCountEl) return;
+            const parsedCount = Number.parseInt(String(matrixMonthCountEl.value || "").trim(), 10);
+            const count = Number.isFinite(parsedCount)
+                ? Math.max(1, Math.min(12, parsedCount))
+                : 1;
+            matrixMonthCountEl.value = String(count);
+            const currentValues = Array.from(matrixMonthsPickerWrapEl.querySelectorAll('input[type="month"]')).map(input => input.value);
+            matrixMonthsPickerWrapEl.innerHTML = "";
+            for (let i = 0; i < count; i += 1) {
+                const label = document.createElement("label");
+                label.textContent = `Mesec ${i + 1}`;
+                const input = document.createElement("input");
+                input.type = "month";
+                input.value = currentValues[i] || getCurrentMonthInputValue(i);
+                label.appendChild(input);
+                matrixMonthsPickerWrapEl.appendChild(label);
+            }
+        }
+
+        function getSloveneMonthTitle(year, monthIndex) {
+            const months = [
+                "JANUAR", "FEBRUAR", "MAREC", "APRIL", "MAJ", "JUNIJ",
+                "JULIJ", "AVGUST", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DECEMBER"
+            ];
+            return `${months[monthIndex]} ${year}`;
+        }
+
+        function getSloveneDayShort(dayIndex) {
+            const days = ["NE", "PO", "TO", "SR", "ČE", "PE", "SO"];
+            return days[dayIndex] || "";
+        }
+
+        function buildCalendarMatrixStateFromMonths(monthValues) {
+            const parsedMonths = monthValues.map((token) => {
+                const [yearRaw, monthRaw] = String(token || "").split("-");
+                const year = Number.parseInt(yearRaw, 10);
+                const month = Number.parseInt(monthRaw, 10);
+                if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+                    throw new Error("Izberi veljavne mesece (format LLLL-MM).");
+                }
+                return { year, month };
+            });
+
+            if (!parsedMonths.length) {
+                throw new Error("Dodaj vsaj en mesec za samodejno pripravo tabele.");
+            }
+
+            const maxDays = parsedMonths.reduce((max, item) => Math.max(max, new Date(item.year, item.month, 0).getDate()), 28);
+            const cols = maxDays + 1;
+            const rows = (parsedMonths.length * 5) - 1;
+            const preset = Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+            const readonly = [];
+            const merges = [];
+            const styles = {};
+
+            const addReadonly = (row, col) => readonly.push({ row, col });
+            const addStyle = (row, col, style) => {
+                styles[`${row}:${col}`] = { ...(styles[`${row}:${col}`] || {}), ...style };
+            };
+
+            parsedMonths.forEach((item, monthBlockIndex) => {
+                const monthDays = new Date(item.year, item.month, 0).getDate();
+                const monthIdx = item.month - 1;
+                const topRow = monthBlockIndex * 5;
+
+                preset[topRow][0] = "mesec";
+                addReadonly(topRow, 0);
+                addStyle(topRow, 0, { align: "right" });
+
+                preset[topRow][1] = getSloveneMonthTitle(item.year, monthIdx);
+                addReadonly(topRow, 1);
+                addStyle(topRow, 1, { align: "center", bold: true, fontSize: 14 });
+                merges.push({ row: topRow, col: 1, rowspan: 1, colspan: monthDays });
+
+                preset[topRow + 1][0] = "dan";
+                addReadonly(topRow + 1, 0);
+                addStyle(topRow + 1, 0, { align: "right" });
+
+                preset[topRow + 2][0] = "";
+                addReadonly(topRow + 2, 0);
+
+                preset[topRow + 3][0] = "konfiguracija";
+                addReadonly(topRow + 3, 0);
+
+                for (let day = 1; day <= monthDays; day += 1) {
+                    const col = day;
+                    const dow = new Date(item.year, monthIdx, day).getDay();
+                    preset[topRow + 1][col] = String(day);
+                    preset[topRow + 2][col] = getSloveneDayShort(dow);
+                    addReadonly(topRow + 1, col);
+                    addReadonly(topRow + 2, col);
+                    addStyle(topRow + 1, col, { align: "center" });
+                    addStyle(topRow + 2, col, { align: "center", bold: true });
+                }
+
+                for (let col = monthDays + 1; col < cols; col += 1) {
+                    addReadonly(topRow, col);
+                    addReadonly(topRow + 1, col);
+                    addReadonly(topRow + 2, col);
+                    addReadonly(topRow + 3, col);
+                }
+
+                if (monthBlockIndex < parsedMonths.length - 1) {
+                    const spacerRow = topRow + 4;
+                    for (let col = 0; col < cols; col += 1) {
+                        addReadonly(spacerRow, col);
+                    }
+                }
+            });
+
+            const dedupReadonly = Array.from(new Map(readonly.map(cell => [`${cell.row}:${cell.col}`, cell])).values());
+            const widths = cols > 1 ? [8, ...Array.from({ length: cols - 1 }, () => 92 / (cols - 1))] : [100];
+
+            return {
+                rows,
+                cols,
+                preset,
+                colWidths: normalizeColumnWidths(widths, cols),
+                styles,
+                readonly: dedupReadonly,
+                merges,
+                selected: new Set()
+            };
+        }
+
+        function generateCalendarMatrixFromInputs() {
+            if (!matrixMonthsPickerWrapEl) return;
+            const monthValues = Array.from(matrixMonthsPickerWrapEl.querySelectorAll('input[type="month"]'))
+                .map(input => input.value)
+                .filter(Boolean);
+
+            if (!monthValues.length) {
+                setStatus("Najprej izberi vsaj en mesec.");
+                return;
+            }
+
+            try {
+                matrixDesignerState = buildCalendarMatrixStateFromMonths(monthValues);
+                matrixSelectionAnchor = null;
+                renderMatrixDesigner();
+                setStatus(`Mesečna matrika pripravljena (${matrixDesignerState.rows} x ${matrixDesignerState.cols}).`);
+            } catch (err) {
+                setStatus(err?.message || "Priprava mesečne matrike ni uspela.");
+            }
+        }
+
+        function splitCoordinateTokens(value) {
+            return String(value || "")
+                .split(/[\n;]+/)
+                .map(token => token.trim())
+                .filter(Boolean);
+        }
+
+        function parseCsvLine(line) {
+            const cells = [];
+            let current = "";
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i += 1) {
+                const ch = line[i];
+                const next = line[i + 1];
+
+                if (ch === '"') {
+                    if (inQuotes && next === '"') {
+                        current += '"';
+                        i += 1;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                    continue;
+                }
+
+                if (!inQuotes && (ch === "," || ch === ";")) {
+                    cells.push(current.trim());
+                    current = "";
+                    continue;
+                }
+
+                current += ch;
+            }
+
+            cells.push(current.trim());
+            return cells;
+        }
+
+        function parseCsvTextToMatrix(text) {
+            const lines = String(text || "")
+                .replace(/^\uFEFF/, "")
+                .split(/\r?\n/)
+                .filter(line => line.trim().length > 0);
+
+            const rows = lines.map(parseCsvLine);
+            const colCount = rows.reduce((max, row) => Math.max(max, row.length), 0);
+            if (!rows.length || !colCount) {
+                return { rows: 1, cols: 1, preset: [[""]] };
+            }
+
+            const normalized = rows.map(row => Array.from({ length: colCount }, (_, i) => row[i] || ""));
+            return { rows: normalized.length, cols: colCount, preset: normalized };
+        }
+
+        function parseMatrixReadonly(value) {
+            const coords = splitCoordinateTokens(value).map(token => {
+                const parts = token.split(",").map(x => Number.parseInt(x.trim(), 10));
+                if (parts.length !== 2 || parts.some(n => !Number.isFinite(n) || n <= 0)) {
+                    throw new Error("Neveljaven zapis neureljive celice. Uporabi obliko vrstica,stolpec.");
+                }
+                return { row: parts[0] - 1, col: parts[1] - 1 };
+            });
+
+            const unique = new Map();
+            coords.forEach(c => unique.set(c.row + ":" + c.col, c));
+            return Array.from(unique.values());
+        }
+
+        function parseMatrixMerges(value) {
+            const merges = splitCoordinateTokens(value).map(token => {
+                const parts = token.split(",").map(x => Number.parseInt(x.trim(), 10));
+                if (parts.length !== 4 || parts.some(n => !Number.isFinite(n) || n <= 0)) {
+                    throw new Error("Neveljaven zapis združitve. Uporabi obliko vrstica,stolpec,rowspan,colspan.");
+                }
+                return {
+                    row: parts[0] - 1,
+                    col: parts[1] - 1,
+                    rowspan: parts[2],
+                    colspan: parts[3]
+                };
+            });
+
+            const unique = new Map();
+            merges.forEach(m => unique.set([m.row, m.col, m.rowspan, m.colspan].join(":"), m));
+            return Array.from(unique.values());
+        }
+
+        function formatMatrixReadonly(readonly) {
+            if (!Array.isArray(readonly) || readonly.length === 0) return "";
+            return readonly.map(cell => `${Number(cell.row || 0) + 1},${Number(cell.col || 0) + 1}`).join("\n");
+        }
+
+        function formatMatrixMerges(merges) {
+            if (!Array.isArray(merges) || merges.length === 0) return "";
+            return merges
+                .map(m => `${Number(m.row || 0) + 1},${Number(m.col || 0) + 1},${Number(m.rowspan || 1)},${Number(m.colspan || 1)}`)
+                .join("\n");
+        }
+
+        function buildMatrixMergeIndex(rows, cols, merges = []) {
+            const skipMap = new Set();
+            const masterMap = new Map();
+
+            merges.forEach((merge) => {
+                const row = Number(merge.row);
+                const col = Number(merge.col);
+                const rowspan = Number(merge.rowspan);
+                const colspan = Number(merge.colspan);
+
+                if (row < 0 || col < 0 || rowspan <= 0 || colspan <= 0 || row + rowspan > rows || col + colspan > cols) {
+                    throw new Error("Združitev celic je izven meja matrike.");
+                }
+
+                const masterKey = row + ":" + col;
+                if (masterMap.has(masterKey)) {
+                    throw new Error("Podvojena začetna celica pri združitvah.");
+                }
+                masterMap.set(masterKey, { rowspan, colspan });
+
+                for (let r = row; r < row + rowspan; r += 1) {
+                    for (let c = col; c < col + colspan; c += 1) {
+                        const key = r + ":" + c;
+                        if (r === row && c === col) continue;
+                        if (skipMap.has(key) || masterMap.has(key)) {
+                            throw new Error("Združitve celic se prekrivajo.");
+                        }
+                        skipMap.add(key);
+                    }
+                }
+            });
+
+            return { skipMap, masterMap };
+        }
+
+        function isMatrixCellReadonly(readonlySet, row, col) {
+            return readonlySet.has(row + ":" + col);
+        }
+
+        function getDefaultMatrixState(rows, cols) {
+            const safeRows = Math.max(1, parsePositiveInt(rows, 1));
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            return {
+                rows: safeRows,
+                cols: safeCols,
+                preset: Array.from({ length: safeRows }, () => Array.from({ length: safeCols }, () => "")),
+                colWidths: getDefaultColumnWidths(safeCols),
+                styles: {},
+                readonly: [],
+                merges: [],
+                selected: new Set()
+            };
+        }
+
+        function getMatrixStateFromInputs() {
+            const rows = Math.max(1, parsePositiveInt(matrixRowsEl.value, 1));
+            const cols = Math.max(1, parsePositiveInt(matrixColsEl.value, 1));
+            const dslParsed = parseMatrixDslPreset(matrixPresetEl.value, rows, cols);
+            let readonly = [];
+            let merges = [];
+            try {
+                readonly = parseMatrixReadonly(matrixReadonlyEl.value);
+            } catch {}
+            try {
+                merges = parseMatrixMerges(matrixMergesEl.value);
+            } catch {}
+
+            const combinedMerges = [...merges, ...(dslParsed.merges || [])];
+            try {
+                const { masterMap } = buildMatrixMergeIndex(rows, cols, combinedMerges);
+                merges = Array.from(masterMap.entries()).map(([key, span]) => {
+                    const [row, col] = key.split(":").map(Number);
+                    return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+                });
+            } catch {
+                merges = [];
+            }
+
+            return {
+                rows,
+                cols,
+                preset: dslParsed.preset,
+                colWidths: parseMatrixColumnWidths(matrixColWidthsEl.value, cols),
+                styles: dslParsed.styles || {},
+                readonly: Array.from(new Map([...readonly, ...(dslParsed.readonly || [])].map(cell => [cell.row + ":" + cell.col, cell])).values()),
+                merges,
+                selected: new Set()
+            };
+        }
+
+        function syncMatrixStateToInputs() {
+            if (!matrixDesignerState) return;
+            matrixRowsEl.value = String(matrixDesignerState.rows);
+            matrixColsEl.value = String(matrixDesignerState.cols);
+            matrixColWidthsEl.value = (matrixDesignerState.colWidths || []).map(w => Math.round(w * 100) / 100).join(";");
+            matrixPresetEl.value = matrixToPresetText(matrixDesignerState.preset, matrixDesignerState.rows, matrixDesignerState.cols);
+            matrixReadonlyEl.value = formatMatrixReadonly(matrixDesignerState.readonly);
+            matrixMergesEl.value = formatMatrixMerges(matrixDesignerState.merges);
+        }
+
+        function resizeMatrixState(rows, cols) {
+            const safeRows = Math.max(1, parsePositiveInt(rows, 1));
+            const safeCols = Math.max(1, parsePositiveInt(cols, 1));
+            if (!matrixDesignerState) {
+                matrixDesignerState = getDefaultMatrixState(safeRows, safeCols);
+                return;
+            }
+
+            const nextPreset = Array.from({ length: safeRows }, (_, r) =>
+                Array.from({ length: safeCols }, (_, c) => String(matrixDesignerState.preset?.[r]?.[c] || ""))
+            );
+            matrixDesignerState.rows = safeRows;
+            matrixDesignerState.cols = safeCols;
+            matrixDesignerState.preset = nextPreset;
+            matrixDesignerState.colWidths = normalizeColumnWidths(matrixDesignerState.colWidths || [], safeCols);
+            matrixDesignerState.readonly = (matrixDesignerState.readonly || [])
+                .filter(cell => cell.row < safeRows && cell.col < safeCols);
+            matrixDesignerState.merges = (matrixDesignerState.merges || [])
+                .filter(merge => merge.row + merge.rowspan <= safeRows && merge.col + merge.colspan <= safeCols);
+            matrixDesignerState.selected = new Set();
+            matrixSelectionAnchor = null;
+        }
+
+        function setMatrixSelection(cellKey, additive, rangeMode = false) {
+            if (!matrixDesignerState) return;
+            if (rangeMode && matrixSelectionAnchor) {
+                const [aRow, aCol] = matrixSelectionAnchor.split(":").map(Number);
+                const [bRow, bCol] = cellKey.split(":").map(Number);
+                const minRow = Math.min(aRow, bRow);
+                const maxRow = Math.max(aRow, bRow);
+                const minCol = Math.min(aCol, bCol);
+                const maxCol = Math.max(aCol, bCol);
+                matrixDesignerState.selected.clear();
+                for (let row = minRow; row <= maxRow; row += 1) {
+                    for (let col = minCol; col <= maxCol; col += 1) {
+                        matrixDesignerState.selected.add(row + ":" + col);
+                    }
+                }
+                return;
+            }
+
+            if (!additive) {
+                matrixDesignerState.selected.clear();
+                matrixDesignerState.selected.add(cellKey);
+                matrixSelectionAnchor = cellKey;
+                return;
+            }
+
+            if (matrixDesignerState.selected.has(cellKey)) {
+                matrixDesignerState.selected.delete(cellKey);
+            } else {
+                matrixDesignerState.selected.add(cellKey);
+            }
+            matrixSelectionAnchor = cellKey;
+        }
+
+        function matrixSelectionToCoords() {
+            if (!matrixDesignerState) return [];
+            return Array.from(matrixDesignerState.selected).map(key => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col };
+            });
+        }
+
+        function normalizeMatrixMergesInState() {
+            if (!matrixDesignerState) return;
+            const { masterMap, skipMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
+            matrixDesignerState.merges = Array.from(masterMap.entries()).map(([key, span]) => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col, rowspan: span.rowspan, colspan: span.colspan };
+            });
+            matrixDesignerState.readonly = (matrixDesignerState.readonly || []).filter(cell => !skipMap.has(cell.row + ":" + cell.col));
+        }
+
+        function renderMatrixDesigner() {
+            if (!matrixDesignerEl) return;
+            if (!matrixDesignerState) {
+                matrixDesignerEl.innerHTML = "<div class='hint'>Najprej ustvari matriko.</div>";
+                return;
+            }
+
+            const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
+            const { skipMap, masterMap } = buildMatrixMergeIndex(matrixDesignerState.rows, matrixDesignerState.cols, matrixDesignerState.merges || []);
+
+            const table = document.createElement("table");
+            table.className = "matrix-table";
+            table.style.minWidth = Math.max(640, (matrixDesignerState.cols + 1) * 42) + "px";
+            const tbody = document.createElement("tbody");
+            const colgroup = document.createElement("colgroup");
+            const normalizedWidths = normalizeColumnWidths(matrixDesignerState.colWidths || [], matrixDesignerState.cols);
+            matrixDesignerState.colWidths = normalizedWidths;
+            normalizedWidths.forEach((width) => {
+                const col = document.createElement("col");
+                col.style.width = width + "%";
+                colgroup.appendChild(col);
+            });
+            table.appendChild(colgroup);
+
+            for (let row = 0; row < matrixDesignerState.rows; row += 1) {
+                const tr = document.createElement("tr");
+                for (let col = 0; col < matrixDesignerState.cols; col += 1) {
+                    const key = row + ":" + col;
+                    if (skipMap.has(key)) continue;
+
+                    const td = document.createElement("td");
+                    td.dataset.matrixRow = String(row);
+                    td.dataset.matrixCol = String(col);
+                    const span = masterMap.get(key);
+                    if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                    if (span?.colspan > 1) td.colSpan = span.colspan;
+
+                    if (isMatrixCellReadonly(readonlySet, row, col)) {
+                        td.classList.add("matrix-readonly-cell");
+                    }
+
+                    const value = String(matrixDesignerState.preset?.[row]?.[col] || "");
+                    const styleMeta = matrixDesignerState.styles?.[key] || {};
+                    const content = document.createElement("div");
+                    content.className = "preserve-wrap";
+                    content.textContent = value;
+                    if (styleMeta.align) content.style.textAlign = styleMeta.align;
+                    if (styleMeta.bold) content.style.fontWeight = "700";
+                    if (styleMeta.fontSize) content.style.fontSize = String(styleMeta.fontSize) + "px";
+                    td.appendChild(content);
+
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+
+            table.appendChild(tbody);
+            matrixDesignerEl.innerHTML = "";
+            matrixDesignerEl.appendChild(table);
+            syncMatrixStateToInputs();
+        }
+
+        function buildMatrixDesignerFromInputs() {
+            try {
+                const fromInputs = getMatrixStateFromInputs();
+                matrixDesignerState = {
+                    ...fromInputs,
+                    selected: new Set()
+                };
+                matrixSelectionAnchor = null;
+                renderMatrixDesigner();
+            } catch (err) {
+                setStatus(err.message || "Napaka pri pripravi matrike.");
+            }
+        }
+
+        async function importCsvIntoMatrixDesigner(file) {
+            if (!file) return;
+            const text = await file.text();
+            const parsed = parseCsvTextToMatrix(text);
+            const safeRows = Math.min(parsed.rows, 60);
+            const safeCols = Math.min(parsed.cols, 60);
+
+            matrixDesignerState = {
+                rows: safeRows,
+                cols: safeCols,
+                preset: parsed.preset.slice(0, safeRows).map(row => row.slice(0, safeCols)),
+                colWidths: getDefaultColumnWidths(safeCols),
+                styles: {},
+                readonly: [],
+                merges: [],
+                selected: new Set()
+            };
+            matrixSelectionAnchor = null;
+
+            renderMatrixDesigner();
+            setStatus(`CSV uvožen v matriko (${safeRows} x ${safeCols}).`);
+        }
+
+        function mergeSelectedMatrixCells() {
+            if (!matrixDesignerState) return;
+            const coords = matrixSelectionToCoords();
+            if (coords.length < 2) {
+                setStatus("Za merge izberi vsaj 2 celici.");
+                return;
+            }
+
+            const rows = coords.map(c => c.row);
+            const cols = coords.map(c => c.col);
+            const minRow = Math.min(...rows);
+            const maxRow = Math.max(...rows);
+            const minCol = Math.min(...cols);
+            const maxCol = Math.max(...cols);
+            const needed = (maxRow - minRow + 1) * (maxCol - minCol + 1);
+            if (needed !== coords.length) {
+                setStatus("Merge zahteva pravokoten izbor celic.");
+                return;
+            }
+
+            const currentMasters = new Set((matrixDesignerState.merges || []).map(m => m.row + ":" + m.col));
+            for (const c of coords) {
+                if (currentMasters.has(c.row + ":" + c.col)) {
+                    setStatus("Najprej razdruži obstoječe merge celice v izbranem območju.");
+                    return;
+                }
+            }
+
+            const merge = { row: minRow, col: minCol, rowspan: maxRow - minRow + 1, colspan: maxCol - minCol + 1 };
+            matrixDesignerState.merges.push(merge);
+            try {
+                normalizeMatrixMergesInState();
+                matrixDesignerState.selected = new Set([minRow + ":" + minCol]);
+                matrixSelectionAnchor = minRow + ":" + minCol;
+                renderMatrixDesigner();
+            } catch (err) {
+                matrixDesignerState.merges.pop();
+                setStatus(err.message || "Merge ni uspel.");
+            }
+        }
+
+        function splitSelectedMatrixCells() {
+            if (!matrixDesignerState) return;
+            const selected = matrixDesignerState.selected || new Set();
+            const before = matrixDesignerState.merges.length;
+            matrixDesignerState.merges = matrixDesignerState.merges.filter(m => !selected.has(m.row + ":" + m.col));
+            matrixDesignerState.selected = new Set();
+            matrixSelectionAnchor = null;
+            if (before === matrixDesignerState.merges.length) {
+                setStatus("Izberi začetno (zgoraj-levo) merge celico za razdružitev.");
+            }
+            renderMatrixDesigner();
+        }
+
+        function toggleReadonlySelectedCells() {
+            if (!matrixDesignerState) return;
+            const selected = matrixSelectionToCoords();
+            if (selected.length === 0) {
+                setStatus("Najprej izberi celice.");
+                return;
+            }
+            const readonlySet = new Set((matrixDesignerState.readonly || []).map(c => c.row + ":" + c.col));
+            selected.forEach((c) => {
+                const key = c.row + ":" + c.col;
+                if (readonlySet.has(key)) readonlySet.delete(key);
+                else readonlySet.add(key);
+            });
+            matrixDesignerState.readonly = Array.from(readonlySet).map(key => {
+                const [row, col] = key.split(":").map(Number);
+                return { row, col };
+            });
+            renderMatrixDesigner();
         }
 
         function parsePositiveInt(value, fallback) {
@@ -2307,10 +3076,10 @@ PO;TO;SR;ČE;PE;SO;NE
                     <label>Ime in priimek</label>
                     <input type="text" placeholder="Vpiši ime in priimek" />
                 </div>
-                <div>
-                    <label>Datum</label>
-                    <input type="text" placeholder="Npr. 18. 3. 2026" />
-                </div>
+        		<div class="date-field">
+            			<label for="surveyDate">Datum</label>
+            			<input id="surveyDate" type="date" />
+        		</div>
                 <div>
                     <label>Enota</label>
                     <select>
@@ -2851,6 +3620,48 @@ PO;TO;SR;ČE;PE;SO;NE
             background: #f3f6fb;
         }
 
+        .date-field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .date-field label {
+            font-weight: 700;
+            color: #1f2937;
+            margin: 0;
+        }
+        
+        .date-field input[type="date"] {
+            width: 100%;
+            padding: 12px 14px;
+            font: inherit;
+            color: #1f2937;
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 14px;
+            outline: none;
+            transition: all 0.18s ease;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+        }
+        
+        .date-field input[type="date"]:hover {
+            border-color: #94a3b8;
+        }
+        
+        .date-field input[type="date"]:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+        }
+        
+        .date-field input[type="date"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        
+        .date-field input[type="date"]::-webkit-calendar-picker-indicator:hover {
+            opacity: 1;
+        }
         .btns {
             display: flex;
             gap: 10px;
@@ -3014,7 +3825,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     <input id="personName" type="text" />
                 </div>
 
-                <div>
+            <div class="date-field">
                     <label for="surveyDate">Datum</label>
                     <input id="surveyDate" type="date" />
                 </div>
