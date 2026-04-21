@@ -504,9 +504,12 @@
         }
 
         .matrix-scroll {
+            display: block;
             width: 100%;
+            max-width: 100%;
             overflow-x: auto;
             overflow-y: hidden;
+            box-sizing: border-box;
         }
 
         .matrix-table th,
@@ -2842,9 +2845,12 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         .matrix-scroll {
+            display: block;
             width: 100%;
+            max-width: 100%;
             overflow-x: auto;
             overflow-y: hidden;
+            box-sizing: border-box;
         }
 
         .matrix-table th,
@@ -3913,6 +3919,9 @@ PO;TO;SR;ČE;PE;SO;NE
                     const matrixPreviewWrap = document.createElement("div");
                     matrixPreviewWrap.className = "matrix-scroll";
                     matrixPreviewWrap.style.marginTop = "8px";
+                    matrixPreviewWrap.style.width = "100%";
+                    matrixPreviewWrap.style.maxWidth = "100%";
+                    matrixPreviewWrap.style.overflowX = "auto";
                     card.appendChild(matrixPreviewWrap);
 
                     const renderSavedMatrix = () => {
