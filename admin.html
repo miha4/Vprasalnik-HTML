@@ -570,6 +570,7 @@
         }
 
         .matrix-print-appendix {
+            display: none;
             margin-top: 16px;
         }
 
@@ -3134,7 +3135,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 display: none !important;
             }
 
-            .matrix-print-appendix {
+            .matrix-print-appendix[data-print-visible="1"] {
+                display: block !important;
                 break-before: page;
             }
 
@@ -3812,7 +3814,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
                 "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
                 "input,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent}.cell-text{white-space:pre-wrap}</style>" +
-                "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠET ZA KONFIGURACIJE</div>" +
+                "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠTER ZA KONFIGURACIJE</div>" +
                 "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
                 "</div><div class='wrap'><div class='scroll' id='matrixHost'></div></div></body></html>"
@@ -3971,12 +3973,14 @@ PO;TO;SR;ČE;PE;SO;NE
 
             if (!matrixItems.length) {
                 appendix.classList.add("hidden");
+                appendix.removeAttribute("data-print-visible");
                 appendix.innerHTML = "";
                 return;
             }
 
-            appendix.classList.remove("hidden");
-            appendix.innerHTML = "<div class='question-title'>MUŠET ZA KONFIGURACIJE</div>";
+            appendix.classList.add("hidden");
+            appendix.setAttribute("data-print-visible", "1");
+            appendix.innerHTML = "<div class='question-title'>MUŠTER ZA KONFIGURACIJE</div>";
 
             matrixItems.forEach(({ q, index }, matrixIndex) => {
                 const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
@@ -4093,6 +4097,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 }).forEach((q) => {
                 try {
                 questionIndex += 1;
+                const currentQuestionIndex = questionIndex;
 
                 const showQuestionNumber = q.type !== "text_block";
                 if (showQuestionNumber) {
@@ -4102,7 +4107,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 const card = document.createElement("div");
                 card.className = "section-question-card";
                 card.dataset.section = String(sectionNumber);
-                card.dataset.questionIndex = String(questionIndex);
+                card.dataset.questionIndex = String(currentQuestionIndex);
                 card.dataset.questionType = String(q.type || "");
 
                 const title = document.createElement("div");
@@ -4132,7 +4137,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                     card.dataset.matrixRows = String(rows);
                     card.dataset.matrixCols = String(cols);
-                    const matrixState = ensureMatrixEditorState(questionIndex, q);
+                    const matrixState = ensureMatrixEditorState(currentQuestionIndex, q);
                     const colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], cols);
                     const styles = q.matrix && typeof q.matrix.styles === "object" && q.matrix.styles !== null ? q.matrix.styles : {};
                     const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
@@ -4174,14 +4179,14 @@ PO;TO;SR;ČE;PE;SO;NE
                     card.appendChild(matrixPreviewWrap);
 
                     const renderSavedMatrix = () => {
-                        const current = ensureMatrixEditorState(questionIndex, q);
+                        const current = ensureMatrixEditorState(currentQuestionIndex, q);
                         matrixPreviewWrap.innerHTML = "";
                         if (!current.saved) {
                             fileInfo.textContent = "Tabela še ni shranjena. Klikni 'Prikaži tabelo' za izpolnjevanje.";
                             return;
                         }
 
-                        fileInfo.textContent = "Shranjena datoteka: " + (current.fileName || ("Matrika-" + (questionIndex + 1) + ".csv"));
+                            fileInfo.textContent = "Shranjena datoteka: " + (current.fileName || ("Matrika-" + (currentQuestionIndex + 1) + ".csv"));
                         const matrixTable = document.createElement("table");
                         matrixTable.className = "matrix-table";
                         matrixTable.style.minWidth = Math.max(640, (cols + 1) * 42) + "px";
@@ -4228,7 +4233,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     openFullscreenBtn.textContent = "Prikaži tabelo";
                     openFullscreenBtn.style.marginTop = "10px";
                     openFullscreenBtn.addEventListener("click", () => {
-                        openMatrixEditorTab(q, questionIndex);
+                        openMatrixEditorTab(q, currentQuestionIndex);
                     });
                     card.appendChild(openFullscreenBtn);
 
