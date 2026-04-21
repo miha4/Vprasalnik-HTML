@@ -3116,6 +3116,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const DRAFT_SAVE_HANDLES = new Map();
         let DRAFT_DIRECTORY_HANDLE = null;
         const MATRIX_CSV_ATTACHMENTS = new Map();
+        const MATRIX_EDITOR_STATE = new Map();
 
         function parseUnits(value) {
             return String(value || "")
@@ -3228,34 +3229,6 @@ PO;TO;SR;ČE;PE;SO;NE
             URL.revokeObjectURL(url);
         }
 
-        function getMatrixCardValues(card, rows, cols) {
-            return Array.from({ length: rows }, (_, rowIndex) =>
-                Array.from({ length: cols }, (_, colIndex) => {
-                    const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
-                    const el = card.querySelector(selector);
-                    if (!el) return "";
-                    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
-                    return el.textContent || "";
-                })
-            );
-        }
-
-        function setMatrixCardValues(card, rows, cols, values) {
-            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-                for (let colIndex = 0; colIndex < cols; colIndex += 1) {
-                    const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
-                    const el = card.querySelector(selector);
-                    if (!el) continue;
-                    const next = String(values?.[rowIndex]?.[colIndex] || "");
-                    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
-                        el.value = next;
-                    } else {
-                        el.textContent = next;
-                    }
-                }
-            }
-        }
-
         function matrixValuesToCsv(values) {
             return values
                 .map(row => row.map(cell => {
@@ -3289,7 +3262,8 @@ PO;TO;SR;ČE;PE;SO;NE
             matrixCards.forEach((card, index) => {
                 const rows = Number(card.dataset.matrixRows || 1);
                 const cols = Number(card.dataset.matrixCols || 1);
-                const values = getMatrixCardValues(card, rows, cols);
+                const state = MATRIX_EDITOR_STATE.get(Number(card.dataset.questionIndex || index));
+                const values = normalizeMatrixRows(state?.rows, rows, cols);
                 const csv = matrixValuesToCsv(values);
                 const fileName = "Priloga-" + unit + "-" + person + "-" + date + "-matrika-" + (index + 1) + ".csv";
                 downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName);
@@ -3298,6 +3272,38 @@ PO;TO;SR;ČE;PE;SO;NE
             });
 
             return downloaded;
+        }
+
+        function getMatrixInitialRows(questionConfig, rows, cols) {
+            const preset = Array.isArray(questionConfig?.matrix?.preset) ? questionConfig.matrix.preset : [];
+            return Array.from({ length: rows }, (_, r) =>
+                Array.from({ length: cols }, (_, c) => String(preset?.[r]?.[c] || ""))
+            );
+        }
+
+        function normalizeMatrixRows(rowsData, rows, cols, fallbackRows = null) {
+            return Array.from({ length: rows }, (_, r) =>
+                Array.from({ length: cols }, (_, c) => {
+                    const source = Array.isArray(rowsData?.[r]) ? rowsData[r] : [];
+                    const fallback = Array.isArray(fallbackRows?.[r]) ? fallbackRows[r] : [];
+                    return String(source[c] ?? fallback[c] ?? "");
+                })
+            );
+        }
+
+        function ensureMatrixEditorState(questionIndex, questionConfig) {
+            const rows = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.rows || 0), 10) || 1);
+            const cols = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.cols || 0), 10) || 1);
+            const initialRows = getMatrixInitialRows(questionConfig, rows, cols);
+            const existing = MATRIX_EDITOR_STATE.get(Number(questionIndex));
+            const state = {
+                rows: normalizeMatrixRows(existing?.rows, rows, cols, initialRows),
+                csv: existing?.csv || "",
+                fileName: existing?.fileName || "",
+                saved: Boolean(existing?.saved)
+            };
+            MATRIX_EDITOR_STATE.set(Number(questionIndex), state);
+            return state;
         }
 
         function getVisibleQuestionConfigs() {
@@ -3332,8 +3338,9 @@ PO;TO;SR;ČE;PE;SO;NE
                     } else if (q.type === "matrix_table") {
                         const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                         const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
-                        answer.matrixRows = getMatrixCardValues(card, rows, cols);
-                        answer.matrixCsv = matrixValuesToCsv(answer.matrixRows);
+                        const matrixState = ensureMatrixEditorState(questionIndex, q);
+                        answer.matrixRows = normalizeMatrixRows(matrixState.rows, rows, cols, getMatrixInitialRows(q, rows, cols));
+                        answer.matrixCsv = matrixState.csv || matrixValuesToCsv(answer.matrixRows);
                     }
 
                     if (q.child) {
@@ -3467,6 +3474,8 @@ PO;TO;SR;ČE;PE;SO;NE
             document.getElementById("personName").value = "";
             document.getElementById("surveyDate").value = "";
             document.getElementById("surveyUnit").value = "";
+            MATRIX_EDITOR_STATE.clear();
+            MATRIX_CSV_ATTACHMENTS.clear();
 
             renderSurvey();
             clearDraftBackup();
@@ -3507,19 +3516,20 @@ PO;TO;SR;ČE;PE;SO;NE
                 } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
                     const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
-                    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-                        const sourceRow = Array.isArray(answer.matrixRows[rowIndex]) ? answer.matrixRows[rowIndex] : [];
-                        for (let colIndex = 0; colIndex < cols; colIndex += 1) {
-                            const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
-                            const el = card.querySelector(selector);
-                            if (!el) continue;
-                            if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
-                                el.value = sourceRow[colIndex] || "";
-                            } else {
-                                el.textContent = sourceRow[colIndex] || "";
-                            }
-                        }
-                    }
+                    const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
+                    const fileName = answer.matrixCsv
+                        ? ("Matrika-" + (Number(answer.questionIndex) + 1) + ".csv")
+                        : "";
+                    MATRIX_EDITOR_STATE.set(Number(answer.questionIndex), {
+                        rows: normalizedRows,
+                        csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
+                        fileName,
+                        saved: true
+                    });
+                    MATRIX_CSV_ATTACHMENTS.set(Number(answer.questionIndex), {
+                        csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
+                        fileName: fileName || ("Matrika-" + (Number(answer.questionIndex) + 1) + ".csv")
+                    });
                 }
 
                 if (q.child && answer.child) {
@@ -3603,10 +3613,11 @@ PO;TO;SR;ČE;PE;SO;NE
             }
         }
 
-        function openMatrixEditorTab(card, questionConfig, questionIndex) {
+        function openMatrixEditorTab(questionConfig, questionIndex) {
             const rows = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.rows || 0), 10) || 1);
             const cols = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.cols || 0), 10) || 1);
-            const values = getMatrixCardValues(card, rows, cols);
+            const currentState = ensureMatrixEditorState(questionIndex, questionConfig);
+            const values = normalizeMatrixRows(currentState.rows, rows, cols, getMatrixInitialRows(questionConfig, rows, cols));
             const styles = questionConfig?.matrix?.styles || {};
             const merges = Array.isArray(questionConfig?.matrix?.merges) ? questionConfig.matrix.merges : [];
             const readonly = Array.isArray(questionConfig?.matrix?.readonly) ? questionConfig.matrix.readonly : [];
@@ -3716,11 +3727,19 @@ PO;TO;SR;ČE;PE;SO;NE
             popupDoc.getElementById("backBtn").addEventListener("click", () => popup.close());
             popupDoc.getElementById("saveBtn").addEventListener("click", () => {
                 const nextRows = collectRows();
-                setMatrixCardValues(card, rows, cols, nextRows);
-                MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), {
-                    csv: matrixValuesToCsv(nextRows),
-                    fileName: "Matrika-" + (Number(questionIndex) + 1) + ".csv"
+                const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "vse-enote");
+                const person = sanitizeFilePart(document.getElementById("personName")?.value || "brez-imena");
+                const date = sanitizeFilePart(document.getElementById("surveyDate")?.value || new Date().toISOString().slice(0, 10));
+                const fileName = "Priloga-" + unit + "-" + person + "-" + date + "-matrika-" + (Number(questionIndex) + 1) + ".csv";
+                const csv = matrixValuesToCsv(nextRows);
+                MATRIX_EDITOR_STATE.set(Number(questionIndex), {
+                    rows: normalizeMatrixRows(nextRows, rows, cols),
+                    csv,
+                    fileName,
+                    saved: true
                 });
+                MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+                renderSurvey();
                 try {
                     localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
                 } catch {}
@@ -3854,23 +3873,16 @@ PO;TO;SR;ČE;PE;SO;NE
                     textarea.placeholder = "Vpiši odgovor...";
                     card.appendChild(textarea);
                 } else if (q.type === "matrix_table") {
-                    const matrixScroll = document.createElement("div");
-                    matrixScroll.className = "matrix-scroll";
-                    const matrixTable = document.createElement("table");
-                    matrixTable.className = "matrix-table";
-                    const tbody = document.createElement("tbody");
-
                     const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                     card.dataset.matrixRows = String(rows);
                     card.dataset.matrixCols = String(cols);
-                    matrixTable.style.minWidth = Math.max(640, (cols + 1) * 42) + "px";
-                    const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
+                    const matrixState = ensureMatrixEditorState(questionIndex, q);
                     const colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], cols);
                     const styles = q.matrix && typeof q.matrix.styles === "object" && q.matrix.styles !== null ? q.matrix.styles : {};
                     const merges = Array.isArray(q.matrix?.merges) ? q.matrix.merges : [];
                     const readonlySet = new Set((Array.isArray(q.matrix?.readonly) ? q.matrix.readonly : []).map(c => c.row + ":" + c.col));
-                    const mergeIndex = (() => {
+                    const buildMergeIndex = () => {
                         const skipMap = new Set();
                         const masterMap = new Map();
                         merges.forEach((merge) => {
@@ -3891,94 +3903,78 @@ PO;TO;SR;ČE;PE;SO;NE
                             }
                         });
                         return { skipMap, masterMap };
-                    })();
+                    };
 
-                    const colgroup = document.createElement("colgroup");
-                    colWidths.forEach((width) => {
-                        const col = document.createElement("col");
-                        col.style.width = width + "%";
-                        colgroup.appendChild(col);
-                    });
-                    matrixTable.appendChild(colgroup);
+                    const fileInfo = document.createElement("div");
+                    fileInfo.className = "hint";
+                    fileInfo.style.marginTop = "8px";
+                    card.appendChild(fileInfo);
 
-                    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
-                        const tr = document.createElement("tr");
-                        const sourceRow = Array.isArray(preset[rowIndex]) ? preset[rowIndex] : [];
-                        for (let colIndex = 0; colIndex < cols; colIndex += 1) {
-                            const cellKey = rowIndex + ":" + colIndex;
-                            if (mergeIndex.skipMap.has(cellKey)) continue;
+                    const matrixPreviewWrap = document.createElement("div");
+                    matrixPreviewWrap.className = "matrix-scroll";
+                    matrixPreviewWrap.style.marginTop = "8px";
+                    card.appendChild(matrixPreviewWrap);
 
-                            const td = document.createElement("td");
-                            const span = mergeIndex.masterMap.get(cellKey);
-                            if (span?.rowspan > 1) td.rowSpan = span.rowspan;
-                            if (span?.colspan > 1) td.colSpan = span.colspan;
+                    const renderSavedMatrix = () => {
+                        const current = ensureMatrixEditorState(questionIndex, q);
+                        matrixPreviewWrap.innerHTML = "";
+                        if (!current.saved) {
+                            fileInfo.textContent = "Tabela še ni shranjena. Klikni 'Prikaži tabelo' za izpolnjevanje.";
+                            return;
+                        }
 
-                            const value = sourceRow[colIndex] || "";
-                            const styleMeta = styles[cellKey] || {};
-                            if (readonlySet.has(cellKey)) {
-                                td.classList.add("matrix-readonly-cell");
+                        fileInfo.textContent = "Shranjena datoteka: " + (current.fileName || ("Matrika-" + (questionIndex + 1) + ".csv"));
+                        const matrixTable = document.createElement("table");
+                        matrixTable.className = "matrix-table";
+                        matrixTable.style.minWidth = Math.max(640, (cols + 1) * 42) + "px";
+                        const colgroup = document.createElement("colgroup");
+                        colWidths.forEach((width) => {
+                            const col = document.createElement("col");
+                            col.style.width = width + "%";
+                            colgroup.appendChild(col);
+                        });
+                        matrixTable.appendChild(colgroup);
+                        const tbody = document.createElement("tbody");
+                        const mergeIndex = buildMergeIndex();
+                        const sourceRows = normalizeMatrixRows(current.rows, rows, cols, getMatrixInitialRows(q, rows, cols));
+
+                        for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                            const tr = document.createElement("tr");
+                            for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                                const cellKey = rowIndex + ":" + colIndex;
+                                if (mergeIndex.skipMap.has(cellKey)) continue;
+                                const td = document.createElement("td");
+                                const span = mergeIndex.masterMap.get(cellKey);
+                                if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                                if (span?.colspan > 1) td.colSpan = span.colspan;
+                                if (readonlySet.has(cellKey)) td.classList.add("matrix-readonly-cell");
+                                const styleMeta = styles[cellKey] || {};
                                 const text = document.createElement("div");
                                 text.className = "preserve-wrap";
-                                text.textContent = value;
+                                text.textContent = sourceRows[rowIndex][colIndex] || "";
                                 if (styleMeta.align) text.style.textAlign = styleMeta.align;
                                 if (styleMeta.bold) text.style.fontWeight = "700";
                                 if (styleMeta.fontSize) text.style.fontSize = String(styleMeta.fontSize) + "px";
-                                text.dataset.cellRow = String(rowIndex);
-                                text.dataset.cellCol = String(colIndex);
                                 td.appendChild(text);
-                            } else {
-                                const input = document.createElement("input");
-                                input.type = "text";
-                                input.value = value;
-                                if (styleMeta.align) input.style.textAlign = styleMeta.align;
-                                if (styleMeta.bold) input.style.fontWeight = "700";
-                                if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
-                                input.dataset.cellRow = String(rowIndex);
-                                input.dataset.cellCol = String(colIndex);
-                                td.appendChild(input);
+                                tr.appendChild(td);
                             }
-                            tr.appendChild(td);
+                            tbody.appendChild(tr);
                         }
-                        tbody.appendChild(tr);
-                    }
-
-                    matrixTable.appendChild(tbody);
-                    matrixScroll.appendChild(matrixTable);
-                    card.appendChild(matrixScroll);
+                        matrixTable.appendChild(tbody);
+                        matrixPreviewWrap.appendChild(matrixTable);
+                    };
 
                     const openFullscreenBtn = document.createElement("button");
                     openFullscreenBtn.type = "button";
                     openFullscreenBtn.className = "no-print";
-                    openFullscreenBtn.textContent = "Odpri tabelo v novem zavihku";
+                    openFullscreenBtn.textContent = "Prikaži tabelo";
                     openFullscreenBtn.style.marginTop = "10px";
                     openFullscreenBtn.addEventListener("click", () => {
-                        openMatrixEditorTab(card, q, questionIndex);
+                        openMatrixEditorTab(q, questionIndex);
                     });
                     card.appendChild(openFullscreenBtn);
 
-                    const copyBtn = document.createElement("button");
-                    copyBtn.type = "button";
-                    copyBtn.className = "no-print";
-                    copyBtn.textContent = "Kopiraj tabelo";
-                    copyBtn.style.marginTop = "10px";
-                    copyBtn.addEventListener("click", async () => {
-                        const tsv = Array.from({ length: rows }, (_, rowIndex) =>
-                            Array.from({ length: cols }, (_, colIndex) => {
-                                const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
-                                const el = matrixTable.querySelector(selector);
-                                if (!el) return "";
-                                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
-                                return el.textContent || "";
-                            }).join("\\t")
-                        ).join("\\n");
-                        try {
-                            await navigator.clipboard.writeText(tsv);
-                            alert("Tabela kopirana v odložišče.");
-                        } catch {
-                            alert("Kopiranje ni uspelo. Označi tabelo ročno.");
-                        }
-                    });
-                    card.appendChild(copyBtn);
+                    renderSavedMatrix();
                 } else if (q.type === "yesno") {
                     const yesno = document.createElement("div");
                     yesno.className = "yesno";
