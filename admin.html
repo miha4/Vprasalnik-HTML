@@ -1552,13 +1552,30 @@ PO;TO;SR;ČE;PE;SO;NE
 
                     const value = String(matrixDesignerState.preset?.[row]?.[col] || "");
                     const styleMeta = matrixDesignerState.styles?.[key] || {};
-                    const content = document.createElement("div");
-                    content.className = "preserve-wrap";
-                    content.textContent = value;
-                    if (styleMeta.align) content.style.textAlign = styleMeta.align;
-                    if (styleMeta.bold) content.style.fontWeight = "700";
-                    if (styleMeta.fontSize) content.style.fontSize = String(styleMeta.fontSize) + "px";
-                    td.appendChild(content);
+                    if (isMatrixCellReadonly(readonlySet, row, col)) {
+                        const content = document.createElement("div");
+                        content.className = "preserve-wrap";
+                        content.textContent = value;
+                        if (styleMeta.align) content.style.textAlign = styleMeta.align;
+                        if (styleMeta.bold) content.style.fontWeight = "700";
+                        if (styleMeta.fontSize) content.style.fontSize = String(styleMeta.fontSize) + "px";
+                        td.appendChild(content);
+                    } else {
+                        const input = document.createElement("input");
+                        input.type = "text";
+                        input.value = value;
+                        if (styleMeta.align) input.style.textAlign = styleMeta.align;
+                        if (styleMeta.bold) input.style.fontWeight = "700";
+                        if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
+                        input.addEventListener("input", (event) => {
+                            if (!Array.isArray(matrixDesignerState.preset[row])) {
+                                matrixDesignerState.preset[row] = Array.from({ length: matrixDesignerState.cols }, () => "");
+                            }
+                            matrixDesignerState.preset[row][col] = event.target.value ?? "";
+                            syncMatrixStateToInputs();
+                        });
+                        td.appendChild(input);
+                    }
 
                     tr.appendChild(td);
                 }
