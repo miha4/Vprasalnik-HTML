@@ -3101,6 +3101,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 Izpolnjevanje se sproti shranjuje lokalno v tem brskalniku.
                 • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
                 • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
+                • Pri matrikah se ob tiskanju samodejno prenesejo tudi CSV priloge.
                 • Shrani vprašalnik: shrani trenutno stanje odgovorov v novo .html datoteko.
                 • Za nadaljevanje kasneje odpri shranjeno .html datoteko.
             </div>
@@ -3114,6 +3115,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
         const DRAFT_SAVE_HANDLES = new Map();
         let DRAFT_DIRECTORY_HANDLE = null;
+        const MATRIX_CSV_ATTACHMENTS = new Map();
 
         function parseUnits(value) {
             return String(value || "")
@@ -3226,6 +3228,78 @@ PO;TO;SR;ČE;PE;SO;NE
             URL.revokeObjectURL(url);
         }
 
+        function getMatrixCardValues(card, rows, cols) {
+            return Array.from({ length: rows }, (_, rowIndex) =>
+                Array.from({ length: cols }, (_, colIndex) => {
+                    const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                    const el = card.querySelector(selector);
+                    if (!el) return "";
+                    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
+                    return el.textContent || "";
+                })
+            );
+        }
+
+        function setMatrixCardValues(card, rows, cols, values) {
+            for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+                for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+                    const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
+                    const el = card.querySelector(selector);
+                    if (!el) continue;
+                    const next = String(values?.[rowIndex]?.[colIndex] || "");
+                    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+                        el.value = next;
+                    } else {
+                        el.textContent = next;
+                    }
+                }
+            }
+        }
+
+        function matrixValuesToCsv(values) {
+            return values
+                .map(row => row.map(cell => {
+                    const value = String(cell || "");
+                    if (/[",\\n;]/.test(value)) {
+                        return '"' + value.replaceAll('"', '""') + '"';
+                    }
+                    return value;
+                }).join(";"))
+                .join("\\n");
+        }
+
+        function sanitizeFilePart(value) {
+            return String(value || "")
+                .trim()
+                .replace(/[\\\\/:*?"<>|]+/g, "-")
+                .replace(/\\s+/g, " ")
+                .slice(0, 80) || "matrika";
+        }
+
+        function downloadMatrixCsvAttachments() {
+            const matrixCards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"))
+                .filter(card => card.dataset.questionType === "matrix_table");
+            if (!matrixCards.length) return 0;
+
+            const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "vse-enote");
+            const person = sanitizeFilePart(document.getElementById("personName")?.value || "brez-imena");
+            const date = sanitizeFilePart(document.getElementById("surveyDate")?.value || new Date().toISOString().slice(0, 10));
+            let downloaded = 0;
+
+            matrixCards.forEach((card, index) => {
+                const rows = Number(card.dataset.matrixRows || 1);
+                const cols = Number(card.dataset.matrixCols || 1);
+                const values = getMatrixCardValues(card, rows, cols);
+                const csv = matrixValuesToCsv(values);
+                const fileName = "Priloga-" + unit + "-" + person + "-" + date + "-matrika-" + (index + 1) + ".csv";
+                downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName);
+                MATRIX_CSV_ATTACHMENTS.set(Number(card.dataset.questionIndex || index), { csv, fileName });
+                downloaded += 1;
+            });
+
+            return downloaded;
+        }
+
         function getVisibleQuestionConfigs() {
             const selectedUnit = document.getElementById("surveyUnit").value;
             const allQuestions = Array.isArray(RUNTIME_CONFIG.questions) ? RUNTIME_CONFIG.questions : [];
@@ -3258,15 +3332,8 @@ PO;TO;SR;ČE;PE;SO;NE
                     } else if (q.type === "matrix_table") {
                         const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                         const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
-                        answer.matrixRows = Array.from({ length: rows }, (_, rowIndex) =>
-                            Array.from({ length: cols }, (_, colIndex) => {
-                                const selector = '[data-cell-row="' + rowIndex + '"][data-cell-col="' + colIndex + '"]';
-                                const el = card.querySelector(selector);
-                                if (!el) return "";
-                                if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
-                                return el.textContent || "";
-                            })
-                        );
+                        answer.matrixRows = getMatrixCardValues(card, rows, cols);
+                        answer.matrixCsv = matrixValuesToCsv(answer.matrixRows);
                     }
 
                     if (q.child) {
@@ -3536,9 +3603,169 @@ PO;TO;SR;ČE;PE;SO;NE
             }
         }
 
+        function openMatrixEditorTab(card, questionConfig, questionIndex) {
+            const rows = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.rows || 0), 10) || 1);
+            const cols = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.cols || 0), 10) || 1);
+            const values = getMatrixCardValues(card, rows, cols);
+            const editorPayload = {
+                rows,
+                cols,
+                values,
+                styles: questionConfig?.matrix?.styles || {},
+                merges: Array.isArray(questionConfig?.matrix?.merges) ? questionConfig.matrix.merges : [],
+                readonly: Array.isArray(questionConfig?.matrix?.readonly) ? questionConfig.matrix.readonly : [],
+                colWidths: normalizeColumnWidths(questionConfig?.matrix?.colWidths || [], cols),
+                title: (questionConfig?.text || "").replace(/<[^>]+>/g, " ").trim()
+            };
+
+            const popup = window.open("", "_blank");
+            if (!popup) {
+                alert("Brskalnik je blokiral nov zavihek. Dovoli pojavna okna za to stran.");
+                return;
+            }
+
+            const payload = JSON.stringify(editorPayload)
+                .replace(/</g, "\\u003c")
+                .replace(/>/g, "\\u003e")
+                .replace(/&/g, "\\u0026");
+
+            popup.document.write(`<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Matrika - celo okno</title>
+<style>
+    body { margin:0; font-family: Arial, sans-serif; background:#eef3f8; }
+    .topbar { position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #cfd8e3; padding:10px; display:flex; gap:8px; align-items:center; }
+    .topbar .title { font-weight:700; margin-right:auto; }
+    .btn { border:1px solid #0f172a; background:#111827; color:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    .btn.secondary { background:#fff; color:#111827; }
+    .wrap { padding:12px; overflow:auto; }
+    .scroll { overflow:auto; border:1px solid #cfd8e3; background:#fff; }
+    table { border-collapse:collapse; table-layout:fixed; min-width:1200px; }
+    td { border:1px solid #d0d7de; padding:0; background:#fff; }
+    .readonly { background:#f8fafc; }
+    input, .cell-text { width:100%; min-width:38px; border:0; padding:6px 4px; font-size:12px; text-align:center; background:transparent; }
+    .cell-text { white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<div class="topbar">
+    <div class="title">Matrika (ležeči prikaz)</div>
+    <button class="btn secondary" id="backBtn">Nazaj brez shranjevanja</button>
+    <button class="btn" id="saveBtn">Shrani in zapri</button>
+</div>
+<div class="wrap"><div class="scroll" id="matrixHost"></div></div>
+<script>
+const DATA = \${payload};
+const host = document.getElementById("matrixHost");
+const readonlySet = new Set((DATA.readonly || []).map(c => c.row + ":" + c.col));
+const mergeMaster = new Map();
+const mergeSkip = new Set();
+(DATA.merges || []).forEach((m) => {
+    const row = Number(m.row), col = Number(m.col), rowspan = Number(m.rowspan || 1), colspan = Number(m.colspan || 1);
+    if (!Number.isFinite(row) || !Number.isFinite(col) || row < 0 || col < 0 || rowspan <= 0 || colspan <= 0) return;
+    mergeMaster.set(row + ":" + col, { rowspan, colspan });
+    for (let r = row; r < row + rowspan; r += 1) {
+        for (let c = col; c < col + colspan; c += 1) {
+            if (r === row && c === col) continue;
+            mergeSkip.add(r + ":" + c);
+        }
+    }
+});
+
+const table = document.createElement("table");
+const colgroup = document.createElement("colgroup");
+(DATA.colWidths || []).forEach((w) => {
+    const col = document.createElement("col");
+    col.style.width = String(w) + "%";
+    colgroup.appendChild(col);
+});
+table.appendChild(colgroup);
+const tbody = document.createElement("tbody");
+for (let row = 0; row < DATA.rows; row += 1) {
+    const tr = document.createElement("tr");
+    for (let col = 0; col < DATA.cols; col += 1) {
+        const key = row + ":" + col;
+        if (mergeSkip.has(key)) continue;
+        const td = document.createElement("td");
+        const span = mergeMaster.get(key);
+        if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+        if (span?.colspan > 1) td.colSpan = span.colspan;
+        const styleMeta = DATA.styles?.[key] || {};
+        const value = String(DATA.values?.[row]?.[col] || "");
+        if (readonlySet.has(key)) {
+            td.className = "readonly";
+            const div = document.createElement("div");
+            div.className = "cell-text";
+            div.textContent = value;
+            if (styleMeta.align) div.style.textAlign = styleMeta.align;
+            if (styleMeta.bold) div.style.fontWeight = "700";
+            if (styleMeta.fontSize) div.style.fontSize = String(styleMeta.fontSize) + "px";
+            div.dataset.row = String(row);
+            div.dataset.col = String(col);
+            td.appendChild(div);
+        } else {
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = value;
+            if (styleMeta.align) input.style.textAlign = styleMeta.align;
+            if (styleMeta.bold) input.style.fontWeight = "700";
+            if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
+            input.dataset.row = String(row);
+            input.dataset.col = String(col);
+            td.appendChild(input);
+        }
+        tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+}
+table.appendChild(tbody);
+host.appendChild(table);
+
+function collectRows() {
+    return Array.from({ length: DATA.rows }, (_, r) =>
+        Array.from({ length: DATA.cols }, (_, c) => {
+            const el = host.querySelector('[data-row=\"' + r + '\"][data-col=\"' + c + '\"]');
+            if (!el) return '';
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return el.value || '';
+            return el.textContent || '';
+        })
+    );
+}
+
+function toCsv(rows) {
+    return rows.map(row => row.map(cell => {
+        const value = String(cell || '');
+        if (/[\",\\n;]/.test(value)) return '\"' + value.replaceAll('\"', '\"\"') + '\"';
+        return value;
+    }).join(';')).join('\\n');
+}
+
+document.getElementById("backBtn").addEventListener("click", () => window.close());
+document.getElementById("saveBtn").addEventListener("click", () => {
+    const rows = collectRows();
+    const csv = toCsv(rows);
+    if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: "matrix-editor-save", questionIndex: \${Number(questionIndex)}, rows, csv }, "*");
+    }
+    window.close();
+});
+</script>
+</body>
+</html>`);
+            popup.document.close();
+        }
+
         function printAndMail() {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
+
+            const csvCount = downloadMatrixCsvAttachments();
+            if (csvCount > 0) {
+                alert("Prenesenih je bilo " + csvCount + " CSV prilog. Priložite jih skupaj s PDF v email.");
+            }
 
             const mailOpened = openMailClient();
             setTimeout(() => {
@@ -3632,6 +3859,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 card.className = "section-question-card";
                 card.dataset.section = String(sectionNumber);
                 card.dataset.questionIndex = String(questionIndex);
+                card.dataset.questionType = String(q.type || "");
 
                 const title = document.createElement("div");
                 title.className = "question-title";
@@ -3664,6 +3892,8 @@ PO;TO;SR;ČE;PE;SO;NE
 
                     const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                    card.dataset.matrixRows = String(rows);
+                    card.dataset.matrixCols = String(cols);
                     matrixTable.style.minWidth = Math.max(640, (cols + 1) * 42) + "px";
                     const preset = Array.isArray(q.matrix?.preset) ? q.matrix.preset : [];
                     const colWidths = normalizeColumnWidths(q.matrix?.colWidths || [], cols);
@@ -3745,6 +3975,16 @@ PO;TO;SR;ČE;PE;SO;NE
                     matrixTable.appendChild(tbody);
                     matrixScroll.appendChild(matrixTable);
                     card.appendChild(matrixScroll);
+
+                    const openFullscreenBtn = document.createElement("button");
+                    openFullscreenBtn.type = "button";
+                    openFullscreenBtn.className = "no-print";
+                    openFullscreenBtn.textContent = "Odpri tabelo v novem zavihku";
+                    openFullscreenBtn.style.marginTop = "10px";
+                    openFullscreenBtn.addEventListener("click", () => {
+                        openMatrixEditorTab(card, q, questionIndex);
+                    });
+                    card.appendChild(openFullscreenBtn);
 
                     const copyBtn = document.createElement("button");
                     copyBtn.type = "button";
@@ -3896,9 +4136,32 @@ PO;TO;SR;ČE;PE;SO;NE
             } catch {}
         });
 
+        window.addEventListener("message", (event) => {
+            const payload = event?.data;
+            if (!payload || payload.type !== "matrix-editor-save") return;
+            const card = document.querySelector('#surveyContainer .section-question-card[data-question-index="' + Number(payload.questionIndex) + '"]');
+            if (!card) return;
+            const rows = Number(card.dataset.matrixRows || 1);
+            const cols = Number(card.dataset.matrixCols || 1);
+            setMatrixCardValues(card, rows, cols, payload.rows || []);
+            if (typeof payload.csv === "string" && payload.csv.trim()) {
+                MATRIX_CSV_ATTACHMENTS.set(Number(payload.questionIndex), {
+                    csv: payload.csv,
+                    fileName: "Matrika-" + Number(payload.questionIndex + 1) + ".csv"
+                });
+            }
+            try {
+                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
+            } catch {}
+        });
+
         document.getElementById("printPdfBtn").addEventListener("click", () => {
             if (!requirePersonName()) return;
             updateDocumentTitleForPdf();
+            const csvCount = downloadMatrixCsvAttachments();
+            if (csvCount > 0) {
+                alert("Prenesenih je bilo " + csvCount + " CSV prilog. Dodajte jih k PDF dokumentu.");
+            }
             window.print();
         });
         document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
@@ -3912,8 +4175,16 @@ PO;TO;SR;ČE;PE;SO;NE
             const action = btn.dataset.sectionAction;
 
             if (action === "print") {
+                const csvCount = downloadMatrixCsvAttachments();
+                if (csvCount > 0) {
+                    alert("Prenesenih je bilo " + csvCount + " CSV prilog. Dodajte jih k PDF dokumentu.");
+                }
                 printSection(sectionIndex);
             } else if (action === "mail") {
+                const csvCount = downloadMatrixCsvAttachments();
+                if (csvCount > 0) {
+                    alert("Prenesenih je bilo " + csvCount + " CSV prilog. Priložite jih skupaj s PDF v email.");
+                }
                 const mailOpened = openMailClient();
                 if (mailOpened) {
                     setTimeout(() => printSection(sectionIndex), 250);
