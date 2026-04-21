@@ -3127,7 +3127,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 Izpolnjevanje se sproti shranjuje lokalno v tem brskalniku.
                 • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
                 • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
-                • Pri matrikah se ob tiskanju samodejno prenesejo tudi CSV priloge.
+                • Konfiguracije se shranijo v .csv datoteko, ki jo morate ročno pripeti v email.
                 • Shrani vprašalnik: shrani trenutno stanje odgovorov v novo .html datoteko.
                 • Za nadaljevanje kasneje odpri shranjeno .html datoteko.
             </div>
@@ -3280,10 +3280,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 .filter(card => card.dataset.questionType === "matrix_table");
             if (!matrixCards.length) return 0;
 
-            const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "vse-enote");
-            const person = sanitizeFilePart(document.getElementById("personName")?.value || "brez-imena");
-            const date = sanitizeFilePart(document.getElementById("surveyDate")?.value || new Date().toISOString().slice(0, 10));
             let downloaded = 0;
+            const total = matrixCards.length;
 
             matrixCards.forEach((card, index) => {
                 const rows = Number(card.dataset.matrixRows || 1);
@@ -3291,7 +3289,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 const state = MATRIX_EDITOR_STATE.get(Number(card.dataset.questionIndex || index));
                 const values = normalizeMatrixRows(state?.rows, rows, cols);
                 const csv = matrixValuesToCsv(values);
-                const fileName = "Priloga-" + unit + "-" + person + "-" + date + "-matrika-" + (index + 1) + ".csv";
+                const fileName = getMatrixCsvFileName(index, total);
                 downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName);
                 MATRIX_CSV_ATTACHMENTS.set(Number(card.dataset.questionIndex || index), { csv, fileName });
                 downloaded += 1;
@@ -3330,6 +3328,33 @@ PO;TO;SR;ČE;PE;SO;NE
             };
             MATRIX_EDITOR_STATE.set(Number(questionIndex), state);
             return state;
+        }
+
+        function getMatrixCsvFileName(index = 0, total = 1) {
+            const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "brez-enote");
+            const base = "MusterKonf_" + unit;
+            if (Number(total) > 1) {
+                return base + "-" + (Number(index) + 1) + ".csv";
+            }
+            return base + ".csv";
+        }
+
+        function getCurrentMatrixCsvArtifacts() {
+            const matrixCards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"))
+                .filter(card => card.dataset.questionType === "matrix_table");
+            const total = matrixCards.length;
+            return matrixCards.map((card, index) => {
+                const questionIndex = Number(card.dataset.questionIndex || index);
+                const rows = Number(card.dataset.matrixRows || 1);
+                const cols = Number(card.dataset.matrixCols || 1);
+                const state = MATRIX_EDITOR_STATE.get(questionIndex);
+                const values = normalizeMatrixRows(state?.rows, rows, cols);
+                return {
+                    questionIndex,
+                    fileName: getMatrixCsvFileName(index, total),
+                    csv: matrixValuesToCsv(values)
+                };
+            });
         }
 
         function getVisibleQuestionConfigs() {
@@ -3410,6 +3435,20 @@ PO;TO;SR;ČE;PE;SO;NE
             const suffix = sectionIndex == null ? "" : "-del-" + sectionIndex;
             const fileName = "Vprašalnik-osnutek" + suffix + ".html";
             const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
+            const csvArtifacts = getCurrentMatrixCsvArtifacts();
+            const saveCsvToDirectory = async (directoryHandle) => {
+                for (const artifact of csvArtifacts) {
+                    const csvHandle = await directoryHandle.getFileHandle(artifact.fileName, { create: true });
+                    const csvWritable = await csvHandle.createWritable();
+                    await csvWritable.write(artifact.csv);
+                    await csvWritable.close();
+                }
+            };
+            const downloadCsvArtifacts = () => {
+                csvArtifacts.forEach((artifact) => {
+                    downloadBlob(new Blob([artifact.csv], { type: "text/csv;charset=utf-8" }), artifact.fileName);
+                });
+            };
 
             if (window.showDirectoryPicker) {
                 try {
@@ -3418,6 +3457,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const writable = await fileHandle.createWritable();
                     await writable.write(htmlWithDraft);
                     await writable.close();
+                    await saveCsvToDirectory(directoryHandle);
                     DRAFT_DIRECTORY_HANDLE = directoryHandle;
                 } catch (err) {
                     if (err?.name === "AbortError") {
@@ -3440,6 +3480,7 @@ PO;TO;SR;ČE;PE;SO;NE
                             const writable = await fileHandle.createWritable();
                             await writable.write(htmlWithDraft);
                             await writable.close();
+                            downloadCsvArtifacts();
                             DRAFT_SAVE_HANDLES.set(handleKey, fileHandle);
                         } catch (saveErr) {
                             if (saveErr?.name === "AbortError") {
@@ -3447,10 +3488,12 @@ PO;TO;SR;ČE;PE;SO;NE
                             }
                             const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
                             downloadBlob(blob, fileName);
+                            downloadCsvArtifacts();
                         }
                     } else {
                         const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
                         downloadBlob(blob, fileName);
+                        downloadCsvArtifacts();
                     }
                 }
             } else if (window.showSaveFilePicker) {
@@ -3470,6 +3513,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const writable = await fileHandle.createWritable();
                     await writable.write(htmlWithDraft);
                     await writable.close();
+                    downloadCsvArtifacts();
                     DRAFT_SAVE_HANDLES.set(handleKey, fileHandle);
                 } catch (err) {
                     if (err?.name === "AbortError") {
@@ -3477,15 +3521,18 @@ PO;TO;SR;ČE;PE;SO;NE
                     }
                     const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
                     downloadBlob(blob, fileName);
+                    downloadCsvArtifacts();
                 }
             } else {
                 const blob = new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" });
                 downloadBlob(blob, fileName);
+                downloadCsvArtifacts();
             }
 
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
+            alert("Vprašalnik in CSV konfiguracije so shranjeni. Oba dokumenta morate ročno priložiti v email.");
         }
 
         function clearDraftBackup() {
@@ -3666,7 +3713,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
                 "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
                 "input,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent}.cell-text{white-space:pre-wrap}</style>" +
-                "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>Matrika (ležeči prikaz)</div>" +
+                "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠET ZA KONFIGURACIJE</div>" +
                 "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
                 "</div><div class='wrap'><div class='scroll' id='matrixHost'></div></div></body></html>"
@@ -3755,10 +3802,8 @@ PO;TO;SR;ČE;PE;SO;NE
             popupDoc.getElementById("backBtn").addEventListener("click", () => popup.close());
             popupDoc.getElementById("saveBtn").addEventListener("click", () => {
                 const nextRows = collectRows();
-                const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "vse-enote");
-                const person = sanitizeFilePart(document.getElementById("personName")?.value || "brez-imena");
-                const date = sanitizeFilePart(document.getElementById("surveyDate")?.value || new Date().toISOString().slice(0, 10));
-                const fileName = "Priloga-" + unit + "-" + person + "-" + date + "-matrika-" + (Number(questionIndex) + 1) + ".csv";
+                const totalMatrices = document.querySelectorAll("#surveyContainer .section-question-card[data-question-type='matrix_table']").length || 1;
+                const fileName = getMatrixCsvFileName(Number(questionIndex), totalMatrices);
                 const csv = matrixValuesToCsv(nextRows);
                 MATRIX_EDITOR_STATE.set(Number(questionIndex), {
                     rows: normalizeMatrixRows(nextRows, rows, cols),
