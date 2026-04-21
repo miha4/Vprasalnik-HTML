@@ -3607,16 +3607,10 @@ PO;TO;SR;ČE;PE;SO;NE
             const rows = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.rows || 0), 10) || 1);
             const cols = Math.max(1, Number.parseInt(String(questionConfig?.matrix?.cols || 0), 10) || 1);
             const values = getMatrixCardValues(card, rows, cols);
-            const editorPayload = {
-                rows,
-                cols,
-                values,
-                styles: questionConfig?.matrix?.styles || {},
-                merges: Array.isArray(questionConfig?.matrix?.merges) ? questionConfig.matrix.merges : [],
-                readonly: Array.isArray(questionConfig?.matrix?.readonly) ? questionConfig.matrix.readonly : [],
-                colWidths: normalizeColumnWidths(questionConfig?.matrix?.colWidths || [], cols),
-                title: (questionConfig?.text || "").replace(/<[^>]+>/g, " ").trim()
-            };
+            const styles = questionConfig?.matrix?.styles || {};
+            const merges = Array.isArray(questionConfig?.matrix?.merges) ? questionConfig.matrix.merges : [];
+            const readonly = Array.isArray(questionConfig?.matrix?.readonly) ? questionConfig.matrix.readonly : [];
+            const colWidths = normalizeColumnWidths(questionConfig?.matrix?.colWidths || [], cols);
 
             const popup = window.open("", "_blank");
             if (!popup) {
@@ -3624,138 +3618,114 @@ PO;TO;SR;ČE;PE;SO;NE
                 return;
             }
 
-            const payload = JSON.stringify(editorPayload)
-                .replace(/</g, "\\u003c")
-                .replace(/>/g, "\\u003e")
-                .replace(/&/g, "\\u0026");
-
-            popup.document.write(`<!DOCTYPE html>
-<html lang="sl">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Matrika - celo okno</title>
-<style>
-    body { margin:0; font-family: Arial, sans-serif; background:#eef3f8; }
-    .topbar { position:sticky; top:0; z-index:5; background:#fff; border-bottom:1px solid #cfd8e3; padding:10px; display:flex; gap:8px; align-items:center; }
-    .topbar .title { font-weight:700; margin-right:auto; }
-    .btn { border:1px solid #0f172a; background:#111827; color:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; }
-    .btn.secondary { background:#fff; color:#111827; }
-    .wrap { padding:12px; overflow:auto; }
-    .scroll { overflow:auto; border:1px solid #cfd8e3; background:#fff; }
-    table { border-collapse:collapse; table-layout:fixed; min-width:1200px; }
-    td { border:1px solid #d0d7de; padding:0; background:#fff; }
-    .readonly { background:#f8fafc; }
-    input, .cell-text { width:100%; min-width:38px; border:0; padding:6px 4px; font-size:12px; text-align:center; background:transparent; }
-    .cell-text { white-space:pre-wrap; }
-</style>
-</head>
-<body>
-<div class="topbar">
-    <div class="title">Matrika (ležeči prikaz)</div>
-    <button class="btn secondary" id="backBtn">Nazaj brez shranjevanja</button>
-    <button class="btn" id="saveBtn">Shrani in zapri</button>
-</div>
-<div class="wrap"><div class="scroll" id="matrixHost"></div></div>
-<script>
-const DATA = \${payload};
-const host = document.getElementById("matrixHost");
-const readonlySet = new Set((DATA.readonly || []).map(c => c.row + ":" + c.col));
-const mergeMaster = new Map();
-const mergeSkip = new Set();
-(DATA.merges || []).forEach((m) => {
-    const row = Number(m.row), col = Number(m.col), rowspan = Number(m.rowspan || 1), colspan = Number(m.colspan || 1);
-    if (!Number.isFinite(row) || !Number.isFinite(col) || row < 0 || col < 0 || rowspan <= 0 || colspan <= 0) return;
-    mergeMaster.set(row + ":" + col, { rowspan, colspan });
-    for (let r = row; r < row + rowspan; r += 1) {
-        for (let c = col; c < col + colspan; c += 1) {
-            if (r === row && c === col) continue;
-            mergeSkip.add(r + ":" + c);
-        }
-    }
-});
-
-const table = document.createElement("table");
-const colgroup = document.createElement("colgroup");
-(DATA.colWidths || []).forEach((w) => {
-    const col = document.createElement("col");
-    col.style.width = String(w) + "%";
-    colgroup.appendChild(col);
-});
-table.appendChild(colgroup);
-const tbody = document.createElement("tbody");
-for (let row = 0; row < DATA.rows; row += 1) {
-    const tr = document.createElement("tr");
-    for (let col = 0; col < DATA.cols; col += 1) {
-        const key = row + ":" + col;
-        if (mergeSkip.has(key)) continue;
-        const td = document.createElement("td");
-        const span = mergeMaster.get(key);
-        if (span?.rowspan > 1) td.rowSpan = span.rowspan;
-        if (span?.colspan > 1) td.colSpan = span.colspan;
-        const styleMeta = DATA.styles?.[key] || {};
-        const value = String(DATA.values?.[row]?.[col] || "");
-        if (readonlySet.has(key)) {
-            td.className = "readonly";
-            const div = document.createElement("div");
-            div.className = "cell-text";
-            div.textContent = value;
-            if (styleMeta.align) div.style.textAlign = styleMeta.align;
-            if (styleMeta.bold) div.style.fontWeight = "700";
-            if (styleMeta.fontSize) div.style.fontSize = String(styleMeta.fontSize) + "px";
-            div.dataset.row = String(row);
-            div.dataset.col = String(col);
-            td.appendChild(div);
-        } else {
-            const input = document.createElement("input");
-            input.type = "text";
-            input.value = value;
-            if (styleMeta.align) input.style.textAlign = styleMeta.align;
-            if (styleMeta.bold) input.style.fontWeight = "700";
-            if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
-            input.dataset.row = String(row);
-            input.dataset.col = String(col);
-            td.appendChild(input);
-        }
-        tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-}
-table.appendChild(tbody);
-host.appendChild(table);
-
-function collectRows() {
-    return Array.from({ length: DATA.rows }, (_, r) =>
-        Array.from({ length: DATA.cols }, (_, c) => {
-            const el = host.querySelector('[data-row=\"' + r + '\"][data-col=\"' + c + '\"]');
-            if (!el) return '';
-            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return el.value || '';
-            return el.textContent || '';
-        })
-    );
-}
-
-function toCsv(rows) {
-    return rows.map(row => row.map(cell => {
-        const value = String(cell || '');
-        if (/[\",\\n;]/.test(value)) return '\"' + value.replaceAll('\"', '\"\"') + '\"';
-        return value;
-    }).join(';')).join('\\n');
-}
-
-document.getElementById("backBtn").addEventListener("click", () => window.close());
-document.getElementById("saveBtn").addEventListener("click", () => {
-    const rows = collectRows();
-    const csv = toCsv(rows);
-    if (window.opener && !window.opener.closed) {
-        window.opener.postMessage({ type: "matrix-editor-save", questionIndex: \${Number(questionIndex)}, rows, csv }, "*");
-    }
-    window.close();
-});
-</script>
-</body>
-</html>`);
+            popup.document.write(
+                "<!DOCTYPE html><html lang='sl'><head><meta charset='UTF-8' />" +
+                "<meta name='viewport' content='width=device-width, initial-scale=1.0' />" +
+                "<title>Matrika - celo okno</title>" +
+                "<style>body{margin:0;font-family:Arial,sans-serif;background:#eef3f8}" +
+                ".topbar{position:sticky;top:0;z-index:5;background:#fff;border-bottom:1px solid #cfd8e3;padding:10px;display:flex;gap:8px;align-items:center}" +
+                ".topbar .title{font-weight:700;margin-right:auto}.btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
+                ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
+                "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
+                "input,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent}.cell-text{white-space:pre-wrap}</style>" +
+                "</head><body><div class='topbar'><div class='title'>Matrika (ležeči prikaz)</div>" +
+                "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
+                "</div><div class='wrap'><div class='scroll' id='matrixHost'></div></div></body></html>"
+            );
             popup.document.close();
+
+            const popupDoc = popup.document;
+            const host = popupDoc.getElementById("matrixHost");
+            const readonlySet = new Set(readonly.map(c => c.row + ":" + c.col));
+            const mergeMaster = new Map();
+            const mergeSkip = new Set();
+            merges.forEach((m) => {
+                const row = Number(m.row);
+                const col = Number(m.col);
+                const rowspan = Number(m.rowspan || 1);
+                const colspan = Number(m.colspan || 1);
+                if (!Number.isFinite(row) || !Number.isFinite(col) || row < 0 || col < 0 || rowspan <= 0 || colspan <= 0) return;
+                mergeMaster.set(row + ":" + col, { rowspan, colspan });
+                for (let r = row; r < row + rowspan; r += 1) {
+                    for (let c = col; c < col + colspan; c += 1) {
+                        if (r === row && c === col) continue;
+                        mergeSkip.add(r + ":" + c);
+                    }
+                }
+            });
+
+            const table = popupDoc.createElement("table");
+            const colgroup = popupDoc.createElement("colgroup");
+            colWidths.forEach((w) => {
+                const col = popupDoc.createElement("col");
+                col.style.width = String(w) + "%";
+                colgroup.appendChild(col);
+            });
+            table.appendChild(colgroup);
+
+            const tbody = popupDoc.createElement("tbody");
+            for (let row = 0; row < rows; row += 1) {
+                const tr = popupDoc.createElement("tr");
+                for (let col = 0; col < cols; col += 1) {
+                    const key = row + ":" + col;
+                    if (mergeSkip.has(key)) continue;
+                    const td = popupDoc.createElement("td");
+                    const span = mergeMaster.get(key);
+                    if (span?.rowspan > 1) td.rowSpan = span.rowspan;
+                    if (span?.colspan > 1) td.colSpan = span.colspan;
+                    const styleMeta = styles[key] || {};
+                    const value = String(values?.[row]?.[col] || "");
+                    if (readonlySet.has(key)) {
+                        td.className = "readonly";
+                        const div = popupDoc.createElement("div");
+                        div.className = "cell-text";
+                        div.textContent = value;
+                        if (styleMeta.align) div.style.textAlign = styleMeta.align;
+                        if (styleMeta.bold) div.style.fontWeight = "700";
+                        if (styleMeta.fontSize) div.style.fontSize = String(styleMeta.fontSize) + "px";
+                        div.dataset.row = String(row);
+                        div.dataset.col = String(col);
+                        td.appendChild(div);
+                    } else {
+                        const input = popupDoc.createElement("input");
+                        input.type = "text";
+                        input.value = value;
+                        if (styleMeta.align) input.style.textAlign = styleMeta.align;
+                        if (styleMeta.bold) input.style.fontWeight = "700";
+                        if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
+                        input.dataset.row = String(row);
+                        input.dataset.col = String(col);
+                        td.appendChild(input);
+                    }
+                    tr.appendChild(td);
+                }
+                tbody.appendChild(tr);
+            }
+            table.appendChild(tbody);
+            host.appendChild(table);
+
+            const collectRows = () => Array.from({ length: rows }, (_, r) =>
+                Array.from({ length: cols }, (_, c) => {
+                    const el = host.querySelector('[data-row="' + r + '"][data-col="' + c + '"]');
+                    if (!el) return "";
+                    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return el.value || "";
+                    return el.textContent || "";
+                })
+            );
+
+            popupDoc.getElementById("backBtn").addEventListener("click", () => popup.close());
+            popupDoc.getElementById("saveBtn").addEventListener("click", () => {
+                const nextRows = collectRows();
+                setMatrixCardValues(card, rows, cols, nextRows);
+                MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), {
+                    csv: matrixValuesToCsv(nextRows),
+                    fileName: "Matrika-" + (Number(questionIndex) + 1) + ".csv"
+                });
+                try {
+                    localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
+                } catch {}
+                popup.close();
+            });
         }
 
         function printAndMail() {
