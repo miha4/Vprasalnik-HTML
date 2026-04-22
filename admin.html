@@ -3969,9 +3969,9 @@ PO;TO;SR;ČE;PE;SO;NE
             });
 
             const parseClipboardGrid = (rawText) => String(rawText || "")
-                .replace(/\r/g, "")
-                .split("\n")
-                .map(line => line.split("\t"))
+                .replace(/\\r/g, "")
+                .split("\\n")
+                .map(line => line.split("\\t"))
                 .filter(row => row.length > 1 || row[0] !== "");
 
             const selectedCellKeys = new Set();
