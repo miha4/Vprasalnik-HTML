@@ -341,6 +341,11 @@
             font-weight: 700;
         }
 
+        .section-header-card .preserve-wrap.muted {
+            color: #000 !important;
+            font-weight: 700;
+        }
+
         .section-questions {
             display: grid;
             gap: 12px;
@@ -3233,6 +3238,20 @@ PO;TO;SR;ČE;PE;SO;NE
 
             .table-cell-input {
                 overflow: visible !important;
+                height: auto !important;
+                max-height: none !important;
+                scrollbar-width: none;
+            }
+
+            .table-cell-input::-webkit-scrollbar {
+                display: none !important;
+            }
+
+            .print-textarea-replacement {
+                min-height: 1.2em;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                line-height: 1.25;
             }
         }
     </style>
@@ -3421,6 +3440,31 @@ PO;TO;SR;ČE;PE;SO;NE
                 textareaEl.style.height = "auto";
                 textareaEl.style.height = textareaEl.scrollHeight + "px";
             });
+        }
+
+        function prepareTextareasForPrint() {
+            const textareas = Array.from(document.querySelectorAll("#surveyContainer .table-cell-input"));
+            textareas.forEach((textareaEl) => {
+                if (!(textareaEl instanceof HTMLTextAreaElement)) return;
+                const replacement = document.createElement("div");
+                replacement.className = "print-textarea-replacement";
+                replacement.textContent = textareaEl.value || "";
+                replacement.style.font = getComputedStyle(textareaEl).font;
+                replacement.style.padding = getComputedStyle(textareaEl).padding;
+                replacement.style.border = "0";
+                replacement.dataset.printFor = "1";
+                textareaEl.dataset.printHidden = "1";
+                textareaEl.style.display = "none";
+                textareaEl.insertAdjacentElement("afterend", replacement);
+            });
+        }
+
+        function restoreTextareasAfterPrint() {
+            document.querySelectorAll("#surveyContainer .table-cell-input[data-print-hidden='1']").forEach((textareaEl) => {
+                textareaEl.style.display = "";
+                delete textareaEl.dataset.printHidden;
+            });
+            document.querySelectorAll("#surveyContainer .print-textarea-replacement[data-print-for='1']").forEach((el) => el.remove());
         }
 
         function addRow(tbody, columns) {
@@ -3894,6 +3938,31 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
             });
 
+            const parseClipboardGrid = (rawText) => String(rawText || "")
+                .replace(/\r/g, "")
+                .split("\n")
+                .map(line => line.split("\t"))
+                .filter(row => row.length > 1 || row[0] !== "");
+
+            const pasteGridAt = (startRow, startCol, rawText) => {
+                const grid = parseClipboardGrid(rawText);
+                if (!grid.length) return false;
+                const spansMultipleCells = grid.length > 1 || grid.some(row => row.length > 1);
+                if (!spansMultipleCells) return false;
+
+                grid.forEach((rowValues, rowOffset) => {
+                    rowValues.forEach((cellValue, colOffset) => {
+                        const row = startRow + rowOffset;
+                        const col = startCol + colOffset;
+                        const target = host.querySelector('textarea[data-row="' + row + '"][data-col="' + col + '"]');
+                        if (!target) return;
+                        target.value = cellValue || "";
+                        target.dispatchEvent(new Event("input"));
+                    });
+                });
+                return true;
+            };
+
             const table = popupDoc.createElement("table");
             const colgroup = popupDoc.createElement("colgroup");
             colWidths.forEach((w) => {
@@ -3940,6 +4009,13 @@ PO;TO;SR;ČE;PE;SO;NE
                             textarea.style.height = textarea.scrollHeight + "px";
                         };
                         textarea.addEventListener("input", popupResize);
+                        textarea.addEventListener("paste", (event) => {
+                            const clipboardText = event.clipboardData?.getData("text/plain") || "";
+                            const handled = pasteGridAt(row, col, clipboardText);
+                            if (handled) {
+                                event.preventDefault();
+                            }
+                        });
                         popupResize();
                         td.appendChild(textarea);
                     }
@@ -4487,7 +4563,11 @@ PO;TO;SR;ČE;PE;SO;NE
             } catch {}
         });
 
-        window.addEventListener("beforeprint", refreshAutoResizeForAllTextareas);
+        window.addEventListener("beforeprint", () => {
+            refreshAutoResizeForAllTextareas();
+            prepareTextareasForPrint();
+        });
+        window.addEventListener("afterprint", restoreTextareasAfterPrint);
         window.addEventListener("resize", () => {
             refreshAutoResizeForAllTextareas();
         });
