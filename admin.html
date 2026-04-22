@@ -331,6 +331,16 @@
             padding: 12px;
         }
 
+        .section-header-card .question-title {
+            font-weight: 800;
+            color: #000;
+        }
+
+        .section-header-card .preserve-wrap {
+            color: #000;
+            font-weight: 700;
+        }
+
         .section-questions {
             display: grid;
             gap: 12px;
@@ -3181,15 +3191,26 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         @media print {
+            @page {
+                size: A4 portrait;
+                margin: 8mm;
+            }
+
             body {
                 background: #fff;
                 padding: 0;
+            }
+
+            .wrap {
+                max-width: none;
+                width: 100%;
             }
 
             .card {
                 box-shadow: none;
                 border: 1px solid #cfd8e3;
                 break-inside: avoid;
+                overflow: visible;
             }
 
             .no-print {
@@ -3208,6 +3229,10 @@ PO;TO;SR;ČE;PE;SO;NE
             .matrix-print-table td {
                 font-size: 9px;
                 padding: 1px 3px;
+            }
+
+            .table-cell-input {
+                overflow: visible !important;
             }
         }
     </style>
@@ -3388,6 +3413,14 @@ PO;TO;SR;ČE;PE;SO;NE
             };
             textareaEl.addEventListener("input", resize);
             resize();
+        }
+
+        function refreshAutoResizeForAllTextareas() {
+            document.querySelectorAll(".table-cell-input").forEach((textareaEl) => {
+                if (!(textareaEl instanceof HTMLTextAreaElement)) return;
+                textareaEl.style.height = "auto";
+                textareaEl.style.height = textareaEl.scrollHeight + "px";
+            });
         }
 
         function addRow(tbody, columns) {
@@ -4437,6 +4470,7 @@ PO;TO;SR;ČE;PE;SO;NE
             });
 
             renderMatrixPrintAppendix();
+            refreshAutoResizeForAllTextareas();
         }
         document.getElementById("personName").addEventListener("change", () => {
             updateDocumentTitleForPdf();
@@ -4451,6 +4485,11 @@ PO;TO;SR;ČE;PE;SO;NE
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
             } catch {}
+        });
+
+        window.addEventListener("beforeprint", refreshAutoResizeForAllTextareas);
+        window.addEventListener("resize", () => {
+            refreshAutoResizeForAllTextareas();
         });
 
         document.getElementById("printPdfBtn").addEventListener("click", async () => {
