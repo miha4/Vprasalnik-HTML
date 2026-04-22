@@ -494,21 +494,8 @@
         .table-cell-input {
             width: 100%;
             min-height: 34px;
-            resize: vertical;
-            border: 0;
-            border-radius: 0;
-            padding: 6px 8px;
-            font: inherit;
-            line-height: 1.25;
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-            background: transparent;
-        }
-
-        .table-cell-input {
-            width: 100%;
-            min-height: 34px;
-            resize: vertical;
+            resize: none;
+            overflow: hidden;
             border: 0;
             border-radius: 0;
             padding: 6px 8px;
@@ -2977,6 +2964,21 @@ PO;TO;SR;ČE;PE;SO;NE
             font-size: 12px;
         }
 
+        .table-cell-input {
+            width: 100%;
+            min-height: 34px;
+            resize: none;
+            overflow: hidden;
+            border: 0;
+            border-radius: 0;
+            padding: 6px 8px;
+            font: inherit;
+            line-height: 1.25;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            background: transparent;
+        }
+
         .matrix-table {
             border-collapse: collapse;
             margin-top: 0;
@@ -3378,6 +3380,16 @@ PO;TO;SR;ČE;PE;SO;NE
             return "";
         }
 
+        function autoResizeTextarea(textareaEl) {
+            if (!textareaEl) return;
+            const resize = () => {
+                textareaEl.style.height = "auto";
+                textareaEl.style.height = textareaEl.scrollHeight + "px";
+            };
+            textareaEl.addEventListener("input", resize);
+            resize();
+        }
+
         function addRow(tbody, columns) {
             const tr = document.createElement("tr");
 
@@ -3385,7 +3397,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 const td = document.createElement("td");
                 const textarea = document.createElement("textarea");
                 textarea.className = "table-cell-input";
-                textarea.rows = 2;
+                textarea.rows = 1;
+                autoResizeTextarea(textarea);
                 td.appendChild(textarea);
                 tr.appendChild(td);
             });
@@ -3736,6 +3749,9 @@ PO;TO;SR;ČE;PE;SO;NE
                                     const tr = tbody.lastElementChild;
                                     Array.from(tr.querySelectorAll("textarea, input")).forEach((input, colIndex) => {
                                         input.value = row[colIndex] || "";
+                                        if (input.tagName === "TEXTAREA") {
+                                            input.dispatchEvent(new Event("input"));
+                                        }
                                     });
                                 });
                             }
@@ -3817,7 +3833,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 ".btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
                 "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
-                "textarea,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25}.cell-text{white-space:pre-wrap}</style>" +
+                "textarea,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25;resize:none;overflow:hidden}.cell-text{white-space:pre-wrap}</style>" +
                 "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠTER ZA KONFIGURACIJE</div>" +
                 "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
@@ -3879,13 +3895,19 @@ PO;TO;SR;ČE;PE;SO;NE
                         td.appendChild(div);
                     } else {
                         const textarea = popupDoc.createElement("textarea");
-                        textarea.rows = 2;
+                        textarea.rows = 1;
                         textarea.value = value;
                         if (styleMeta.align) textarea.style.textAlign = styleMeta.align;
                         if (styleMeta.bold) textarea.style.fontWeight = "700";
                         if (styleMeta.fontSize) textarea.style.fontSize = String(styleMeta.fontSize) + "px";
                         textarea.dataset.row = String(row);
                         textarea.dataset.col = String(col);
+                        const popupResize = () => {
+                            textarea.style.height = "auto";
+                            textarea.style.height = textarea.scrollHeight + "px";
+                        };
+                        textarea.addEventListener("input", popupResize);
+                        popupResize();
                         td.appendChild(textarea);
                     }
                     tr.appendChild(td);
