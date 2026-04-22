@@ -2584,6 +2584,15 @@ PO;TO;SR;ČE;PE;SO;NE
             });
 
             previewContainerEl.innerHTML = html;
+            previewContainerEl.querySelectorAll(".table-cell-input").forEach((textareaEl) => {
+                if (!(textareaEl instanceof HTMLTextAreaElement)) return;
+                const resize = () => {
+                    textareaEl.style.height = "auto";
+                    textareaEl.style.height = textareaEl.scrollHeight + "px";
+                };
+                textareaEl.addEventListener("input", resize);
+                resize();
+            });
         }
 
         function renderAll() {
@@ -4075,8 +4084,18 @@ PO;TO;SR;ČE;PE;SO;NE
                         textarea.addEventListener("input", popupResize);
                         textarea.addEventListener("mousedown", (event) => {
                             const currentKey = keyOf(row, col);
+                            const additive = event.ctrlKey || event.metaKey;
                             if (event.shiftKey && selectionAnchor) {
                                 selectRange(selectionAnchor, currentKey);
+                            } else if (additive) {
+                                dragSelecting = false;
+                                if (selectedCellKeys.has(currentKey)) {
+                                    selectedCellKeys.delete(currentKey);
+                                } else {
+                                    selectedCellKeys.add(currentKey);
+                                }
+                                selectionAnchor = currentKey;
+                                paintSelection();
                             } else {
                                 dragSelecting = true;
                                 selectionAnchor = currentKey;
@@ -4084,6 +4103,7 @@ PO;TO;SR;ČE;PE;SO;NE
                                 selectedCellKeys.add(currentKey);
                                 paintSelection();
                             }
+                            event.preventDefault();
                         });
                         textarea.addEventListener("mouseover", () => {
                             if (!dragSelecting || !selectionAnchor) return;
