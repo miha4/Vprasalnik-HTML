@@ -4120,8 +4120,8 @@ PO;TO;SR;ČE;PE;SO;NE
                         });
                         textarea.addEventListener("paste", (event) => {
                             const clipboardText = event.clipboardData?.getData("text/plain") || "";
-                            const singleCellText = clipboardText.replace(/\r/g, "").trimEnd();
-                            if (!singleCellText.includes("\n") && !singleCellText.includes("\t")) {
+                            const singleCellText = clipboardText.replace(/\\r/g, "").trimEnd();
+                            if (!singleCellText.includes("\n") && !singleCellText.includes("\\t")) {
                                 const filledSelection = fillSelectionWithSingleValue(singleCellText);
                                 if (filledSelection) {
                                     event.preventDefault();
