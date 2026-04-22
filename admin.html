@@ -620,7 +620,7 @@
 
         .matrix-print-wrap {
             width: 100%;
-            overflow: hidden;
+            overflow: auto;
         }
 
         .matrix-print-table {
@@ -643,6 +643,20 @@
             white-space: pre-wrap;
             width: 100%;
             text-align: center;
+        }
+
+        .matrix-print-cell-input {
+            width: 100%;
+            min-width: 56px;
+            min-height: 28px;
+            border: 0;
+            resize: vertical;
+            padding: 2px 4px;
+            font: inherit;
+            line-height: 1.2;
+            background: transparent;
+            white-space: pre-wrap;
+            box-sizing: border-box;
         }
 
         th, td {
@@ -782,6 +796,10 @@ Lep pozdrav
                         <button type="button" onclick="addImage()">🖼 Slika</button>
                     </div>
                     <div id="qText" contenteditable="true" class="rte"></div>
+                    <div class="checkbox-row">
+                        <input id="qTextBold" type="checkbox" />
+                        <label for="qTextBold" style="margin:0;">Prikaži vprašanje krepko (bold)</label>
+                    </div>
 
                     <label for="qType">Tip vprašanja</label>
                     <select id="qType">
@@ -869,6 +887,10 @@ PO;TO;SR;ČE;PE;SO;NE
                             <button type="button" onclick="addImage()">🖼 Slika</button>
                         </div>
                         <div id="childText" contenteditable="true" class="rte"></div>
+                        <div class="checkbox-row">
+                            <input id="childTextBold" type="checkbox" />
+                            <label for="childTextBold" style="margin:0;">Prikaži podvprašanje krepko (bold)</label>
+                        </div>
 
                         <div id="childColumnsWrap">
                             <label for="childColumns">Stolpci tabele (ločeni s podpičjem)</label>
@@ -957,6 +979,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const surveyEmailMessageEl = document.getElementById("surveyEmailMessage");
         const surveyPdfFileNameEl = document.getElementById("surveyPdfFileName");
         const qTextEl = document.getElementById("qText");
+        const qTextBoldEl = document.getElementById("qTextBold");
         const qTypeEl = document.getElementById("qType");
         const qSectionIdEl = document.getElementById("qSectionId");
         const splitSurveyEl = { checked: false };
@@ -966,6 +989,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const childFieldsEl = document.getElementById("childFields");
         const childTypeEl = document.getElementById("childType");
         const childTextEl = document.getElementById("childText");
+        const childTextBoldEl = document.getElementById("childTextBold");
         const childColumnsEl = document.getElementById("childColumns");
         const childColumnsWrapEl = document.getElementById("childColumnsWrap");
         const matrixFieldsEl = document.getElementById("matrixFields");
@@ -1886,11 +1910,13 @@ PO;TO;SR;ČE;PE;SO;NE
         function resetQuestionForm() {
             editIndex = -1;
             qTextEl.innerHTML = "";
+            qTextBoldEl.checked = false;
             qTypeEl.value = "yesno";
             hasChildEl.checked = false;
             splitSurveyEl.checked = false;
             childTypeEl.value = "table";
             childTextEl.innerHTML = "";
+            childTextBoldEl.checked = false;
             childColumnsEl.value = "";
             matrixRowsEl.value = "3";
             matrixColsEl.value = "7";
@@ -2036,6 +2062,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 id: "q_" + Date.now() + "_" + Math.floor(Math.random() * 1000),
                 type: qTypeEl.value,
                 text: text,
+                textBold: !!qTextBoldEl.checked,
                 image: questionImageData || "",
                 units: getSelectedQuestionUnits(),
                 sectionId: qSectionIdEl.value || state.sections[0]?.id || "",
@@ -2062,6 +2089,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 question.child = {
                     type: childType,
                     text: childText,
+                    textBold: !!childTextBoldEl.checked,
                     image: childImageData || ""
                 };
 
@@ -2187,11 +2215,13 @@ PO;TO;SR;ČE;PE;SO;NE
             editIndex = index;
 
               qTextEl.innerHTML = q.text;
+            qTextBoldEl.checked = !!q.textBold;
             qTypeEl.value = q.type;
             hasChildEl.checked = !!q.child;
             splitSurveyEl.checked = !!q.splitSurvey;
             childTypeEl.value = q.child?.type || "table";
               childTextEl.innerHTML = q.child ? q.child.text : "";
+            childTextBoldEl.checked = q.child ? !!q.child.textBold : false;
             childColumnsEl.value = q.child?.type === "text" ? "" : (q.child?.columns || []).join("; ");
             matrixRowsEl.value = String(q.matrix?.rows || 3);
             matrixColsEl.value = String(q.matrix?.cols || 7);
@@ -2249,7 +2279,7 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="question-head">
                 <div>
                     <div class="badge">Vprašanje ${index + 1}</div>
-                    <div><strong>${renderRichText(applyAdminPlaceholders(q.text))}</strong></div>
+                    <div style="font-weight:${q.textBold ? "700" : "400"};">${renderRichText(applyAdminPlaceholders(q.text))}</div>
 
                     <div class="hint">
                         Tip: ${escapeHtml(
@@ -2276,7 +2306,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                     ${q.child ? `
                         <div class="hint" style="margin-top:6px;">
-                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): ${renderRichText(applyAdminPlaceholders(q.child.text))}
+                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): <span style="font-weight:${q.child.textBold ? "700" : "400"};">${renderRichText(applyAdminPlaceholders(q.child.text))}</span>
                             ${q.child.type === "table" ? `<br>Stolpci: ${escapeHtml((q.child.columns || []).join("; "))}` : ""}
                         </div>
                     ` : ""}
@@ -2518,7 +2548,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                         html += `
             <div class="section-question-card">
-                <div class="survey-title">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
+                <div class="survey-title" style="font-weight:${q.textBold ? "700" : "400"};">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
                                             ? "Velja za vse enote"
@@ -2546,7 +2576,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                 ${q.child ? `
                     <div class="child-box">
-                        <div class="preserve-wrap"><strong>${renderRichText(applyAdminPlaceholders(q.child.text))}</strong></div>
+                        <div class="preserve-wrap" style="font-weight:${q.child.textBold ? "700" : "400"};">${renderRichText(applyAdminPlaceholders(q.child.text))}</div>
 
                         ${q.child.image ? `
                             <div class="question-image">
@@ -2699,6 +2729,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const normalizedChild = {
                 type,
                 text: child.text || "",
+                textBold: !!child.textBold,
                 image: child.image || ""
             };
 
@@ -2755,6 +2786,7 @@ PO;TO;SR;ČE;PE;SO;NE
         function normalizeQuestion(question) {
             return {
                 ...question,
+                textBold: !!question?.textBold,
                 units: Array.isArray(question.units) ? question.units : [],
                 sectionId: question.sectionId || "",
                 splitSurvey: !!question.splitSurvey,
@@ -3489,12 +3521,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
         function withPreparedPrint(printAction) {
             refreshAutoResizeForAllTextareas();
-            prepareTextareasForPrint();
-            try {
-                printAction();
-            } finally {
-                setTimeout(() => restoreTextareasAfterPrint(), 800);
-            }
+            printAction();
         }
 
         function addRow(tbody, columns) {
@@ -3875,7 +3902,7 @@ PO;TO;SR;ČE;PE;SO;NE
         function getPdfFileName() {
             const baseName = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota}")
                 .trim()
-                .replace(/[\\/:*?"<>|]+/g, "-")
+                .replace(/[\\\\/:*?"<>|]+/g, "-")
                 .replace(/\\s+/g, " ");
             return (baseName || "Vprašalnik") + ".pdf";
         }
@@ -3969,9 +3996,9 @@ PO;TO;SR;ČE;PE;SO;NE
             });
 
             const parseClipboardGrid = (rawText) => String(rawText || "")
-                .replace(/\\\\r/g, "")
-                .split("\\\\n")
-                .map(line => line.split("\\\\t"))
+                .replace(/\\r/g, "")
+                .split("\\n")
+                .map(line => line.split("\\t"))
                 .filter(row => row.length > 1 || row[0] !== "");
 
             const selectedCellKeys = new Set();
@@ -4085,6 +4112,7 @@ PO;TO;SR;ČE;PE;SO;NE
                         textarea.addEventListener("mousedown", (event) => {
                             const currentKey = keyOf(row, col);
                             const additive = event.ctrlKey || event.metaKey;
+                            const shouldPreventDefault = event.shiftKey || additive;
                             if (event.shiftKey && selectionAnchor) {
                                 selectRange(selectionAnchor, currentKey);
                             } else if (additive) {
@@ -4103,7 +4131,9 @@ PO;TO;SR;ČE;PE;SO;NE
                                 selectedCellKeys.add(currentKey);
                                 paintSelection();
                             }
-                            event.preventDefault();
+                            if (shouldPreventDefault) {
+                                event.preventDefault();
+                            }
                         });
                         textarea.addEventListener("mouseover", () => {
                             if (!dragSelecting || !selectionAnchor) return;
@@ -4272,6 +4302,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 wrap.className = "matrix-print-wrap";
                 const table = document.createElement("table");
                 table.className = "matrix-print-table";
+                table.style.minWidth = Math.max(640, cols * 62) + "px";
                 const tbody = document.createElement("tbody");
 
                 for (let row = 0; row < rows; row += 1) {
@@ -4284,12 +4315,14 @@ PO;TO;SR;ČE;PE;SO;NE
                         if (span?.rowspan > 1) td.rowSpan = span.rowspan;
                         if (span?.colspan > 1) td.colSpan = span.colspan;
                         const styleMeta = styles[key] || {};
-                        const content = document.createElement("div");
-                        content.className = "matrix-print-cell";
-                        content.textContent = String(values?.[row]?.[col] || "");
+                        const content = document.createElement("textarea");
+                        content.className = "matrix-print-cell matrix-print-cell-input";
+                        content.rows = 1;
+                        content.value = String(values?.[row]?.[col] || "");
                         if (styleMeta.align) content.style.textAlign = styleMeta.align;
                         if (styleMeta.bold) content.style.fontWeight = "700";
                         if (styleMeta.fontSize) content.style.fontSize = String(Math.max(8, Number(styleMeta.fontSize) - 2)) + "px";
+                        if (styleMeta.readonly) content.readOnly = true;
                         td.appendChild(content);
                         tr.appendChild(td);
                     }
@@ -4376,6 +4409,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 const title = document.createElement("div");
                 title.className = "question-title";
                 title.innerHTML = (showQuestionNumber ? visibleIndex + ". " : "") + applyRuntimePlaceholders(q.text || "");
+                title.style.fontWeight = q.textBold ? "700" : "400";
                 card.appendChild(title);
 
                 if (q.image) {
@@ -4507,9 +4541,8 @@ PO;TO;SR;ČE;PE;SO;NE
                         child.className = "child-box";
                         const childTitle = document.createElement("div");
                         childTitle.className = "preserve-wrap";
-                        const strong = document.createElement("strong");
-                        strong.innerHTML = applyRuntimePlaceholders(q.child.text || "");
-                        childTitle.appendChild(strong);
+                        childTitle.style.fontWeight = q.child.textBold ? "700" : "400";
+                        childTitle.innerHTML = applyRuntimePlaceholders(q.child.text || "");
                         child.appendChild(childTitle);
 
                         if (q.child.image) {
@@ -4584,11 +4617,8 @@ PO;TO;SR;ČE;PE;SO;NE
 
                         const childTitle = document.createElement("div");
                         childTitle.className = "preserve-wrap";
-
-                        const strong = document.createElement("strong");
-                        strong.innerHTML = applyRuntimePlaceholders(q.child.text || "");
-
-                        childTitle.appendChild(strong);
+                        childTitle.style.fontWeight = q.child.textBold ? "700" : "400";
+                        childTitle.innerHTML = applyRuntimePlaceholders(q.child.text || "");
                         child.appendChild(childTitle);
 
                         if (q.child.image) {
