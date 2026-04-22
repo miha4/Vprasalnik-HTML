@@ -509,8 +509,8 @@
         .table-cell-input {
             width: 100%;
             min-height: 34px;
-            resize: none;
-            overflow: hidden;
+            resize: none !important;
+            overflow: hidden !important;
             border: 0;
             border-radius: 0;
             padding: 6px 8px;
@@ -2982,8 +2982,8 @@ PO;TO;SR;ČE;PE;SO;NE
         .table-cell-input {
             width: 100%;
             min-height: 34px;
-            resize: none;
-            overflow: hidden;
+            resize: none !important;
+            overflow: hidden !important;
             border: 0;
             border-radius: 0;
             padding: 6px 8px;
@@ -3123,6 +3123,17 @@ PO;TO;SR;ČE;PE;SO;NE
             border: 1px solid rgba(15, 23, 42, 0.12);
             border-radius: 12px;
             padding: 12px;
+        }
+
+        .section-header-card .question-title {
+            font-weight: 800;
+            color: #000;
+        }
+
+        .section-header-card .preserve-wrap,
+        .section-header-card .preserve-wrap.muted {
+            color: #000 !important;
+            font-weight: 700;
         }
 
         .section-questions {
@@ -3465,6 +3476,16 @@ PO;TO;SR;ČE;PE;SO;NE
                 delete textareaEl.dataset.printHidden;
             });
             document.querySelectorAll("#surveyContainer .print-textarea-replacement[data-print-for='1']").forEach((el) => el.remove());
+        }
+
+        function withPreparedPrint(printAction) {
+            refreshAutoResizeForAllTextareas();
+            prepareTextareasForPrint();
+            try {
+                printAction();
+            } finally {
+                setTimeout(() => restoreTextareasAfterPrint(), 800);
+            }
         }
 
         function addRow(tbody, columns) {
@@ -3910,7 +3931,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 ".btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
                 "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
-                "textarea,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25;resize:none;overflow:hidden}.cell-text{white-space:pre-wrap}</style>" +
+                "textarea,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25;resize:none;overflow:hidden}textarea.cell-selected{background:#dbeafe;outline:2px solid #2563eb;outline-offset:-2px}.cell-text{white-space:pre-wrap}</style>" +
                 "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠTER ZA KONFIGURACIJE</div>" +
                 "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
@@ -3944,6 +3965,38 @@ PO;TO;SR;ČE;PE;SO;NE
                 .map(line => line.split("\t"))
                 .filter(row => row.length > 1 || row[0] !== "");
 
+            const selectedCellKeys = new Set();
+            let selectionAnchor = null;
+            let dragSelecting = false;
+
+            const keyOf = (row, col) => row + ":" + col;
+            const cellFromKey = (key) => {
+                const [row, col] = key.split(":");
+                return host.querySelector('textarea[data-row="' + row + '"][data-col="' + col + '"]');
+            };
+            const paintSelection = () => {
+                host.querySelectorAll("textarea[data-row][data-col]").forEach((el) => {
+                    const key = keyOf(Number(el.dataset.row), Number(el.dataset.col));
+                    el.classList.toggle("cell-selected", selectedCellKeys.has(key));
+                });
+            };
+            const selectRange = (fromKey, toKey) => {
+                const [fromRow, fromCol] = fromKey.split(":").map(Number);
+                const [toRow, toCol] = toKey.split(":").map(Number);
+                const minRow = Math.min(fromRow, toRow);
+                const maxRow = Math.max(fromRow, toRow);
+                const minCol = Math.min(fromCol, toCol);
+                const maxCol = Math.max(fromCol, toCol);
+                selectedCellKeys.clear();
+                for (let row = minRow; row <= maxRow; row += 1) {
+                    for (let col = minCol; col <= maxCol; col += 1) {
+                        const target = host.querySelector('textarea[data-row="' + row + '"][data-col="' + col + '"]');
+                        if (target) selectedCellKeys.add(keyOf(row, col));
+                    }
+                }
+                paintSelection();
+            };
+
             const pasteGridAt = (startRow, startCol, rawText) => {
                 const grid = parseClipboardGrid(rawText);
                 if (!grid.length) return false;
@@ -3959,6 +4012,17 @@ PO;TO;SR;ČE;PE;SO;NE
                         target.value = cellValue || "";
                         target.dispatchEvent(new Event("input"));
                     });
+                });
+                return true;
+            };
+
+            const fillSelectionWithSingleValue = (value) => {
+                if (selectedCellKeys.size <= 1) return false;
+                selectedCellKeys.forEach((key) => {
+                    const target = cellFromKey(key);
+                    if (!target) return;
+                    target.value = value;
+                    target.dispatchEvent(new Event("input"));
                 });
                 return true;
             };
@@ -4009,8 +4073,41 @@ PO;TO;SR;ČE;PE;SO;NE
                             textarea.style.height = textarea.scrollHeight + "px";
                         };
                         textarea.addEventListener("input", popupResize);
+                        textarea.addEventListener("mousedown", (event) => {
+                            const currentKey = keyOf(row, col);
+                            if (event.shiftKey && selectionAnchor) {
+                                selectRange(selectionAnchor, currentKey);
+                            } else {
+                                dragSelecting = true;
+                                selectionAnchor = currentKey;
+                                selectedCellKeys.clear();
+                                selectedCellKeys.add(currentKey);
+                                paintSelection();
+                            }
+                        });
+                        textarea.addEventListener("mouseover", () => {
+                            if (!dragSelecting || !selectionAnchor) return;
+                            selectRange(selectionAnchor, keyOf(row, col));
+                        });
+                        textarea.addEventListener("focus", () => {
+                            const currentKey = keyOf(row, col);
+                            if (!selectedCellKeys.has(currentKey)) {
+                                selectedCellKeys.clear();
+                                selectedCellKeys.add(currentKey);
+                                paintSelection();
+                            }
+                            selectionAnchor = currentKey;
+                        });
                         textarea.addEventListener("paste", (event) => {
                             const clipboardText = event.clipboardData?.getData("text/plain") || "";
+                            const singleCellText = clipboardText.replace(/\r/g, "").trimEnd();
+                            if (!singleCellText.includes("\n") && !singleCellText.includes("\t")) {
+                                const filledSelection = fillSelectionWithSingleValue(singleCellText);
+                                if (filledSelection) {
+                                    event.preventDefault();
+                                    return;
+                                }
+                            }
                             const handled = pasteGridAt(row, col, clipboardText);
                             if (handled) {
                                 event.preventDefault();
@@ -4025,6 +4122,9 @@ PO;TO;SR;ČE;PE;SO;NE
             }
             table.appendChild(tbody);
             host.appendChild(table);
+            popupDoc.addEventListener("mouseup", () => {
+                dragSelecting = false;
+            });
 
             const collectRows = () => Array.from({ length: rows }, (_, r) =>
                 Array.from({ length: cols }, (_, c) => {
@@ -4065,7 +4165,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
             const mailOpened = openMailClient();
             setTimeout(() => {
-                window.print();
+                withPreparedPrint(() => window.print());
             }, 250);
 
             if (mailOpened) {
@@ -4081,7 +4181,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const hiddenCards = Array.from(document.querySelectorAll("#surveyContainer > .section-shell[data-section]"))
                 .filter(card => Number(card.dataset.section) !== Number(sectionIndex));
             hiddenCards.forEach(card => card.classList.add("print-hidden-temp"));
-            window.print();
+            withPreparedPrint(() => window.print());
             setTimeout(() => hiddenCards.forEach(card => card.classList.remove("print-hidden-temp")), 250);
         }
 
@@ -4577,7 +4677,7 @@ PO;TO;SR;ČE;PE;SO;NE
             updateDocumentTitleForPdf();
             const csvArtifacts = downloadMatrixCsvAttachments();
             notifyCsvDownload(csvArtifacts);
-            window.print();
+            withPreparedPrint(() => window.print());
         });
         document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
         document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
