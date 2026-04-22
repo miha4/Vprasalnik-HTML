@@ -645,18 +645,23 @@
             text-align: center;
         }
 
-        .matrix-print-cell-input {
+        .matrix-print-cell-editable {
             width: 100%;
-            min-width: 56px;
-            min-height: 28px;
-            border: 0;
-            resize: vertical;
-            padding: 2px 4px;
+            min-width: 52px;
+            min-height: 20px;
+            padding: 1px 2px;
             font: inherit;
             line-height: 1.2;
             background: transparent;
             white-space: pre-wrap;
             box-sizing: border-box;
+            border: 0;
+            outline: none;
+        }
+
+        .matrix-print-cell-editable:focus {
+            outline: 1px solid #2563eb;
+            outline-offset: -1px;
         }
 
         th, td {
@@ -3288,6 +3293,25 @@ PO;TO;SR;ČE;PE;SO;NE
                 padding: 1px 3px;
             }
 
+            .matrix-print-wrap {
+                overflow: visible !important;
+            }
+
+            .matrix-print-table {
+                width: 100% !important;
+                min-width: 0 !important;
+                table-layout: fixed;
+            }
+
+            .matrix-print-cell-editable {
+                min-width: 0;
+                min-height: 12px;
+                padding: 0;
+                outline: none !important;
+                font-size: 8px;
+                line-height: 1.1;
+            }
+
             .table-cell-input {
                 overflow: visible !important;
                 height: auto !important;
@@ -4315,14 +4339,14 @@ PO;TO;SR;ČE;PE;SO;NE
                         if (span?.rowspan > 1) td.rowSpan = span.rowspan;
                         if (span?.colspan > 1) td.colSpan = span.colspan;
                         const styleMeta = styles[key] || {};
-                        const content = document.createElement("textarea");
-                        content.className = "matrix-print-cell matrix-print-cell-input";
-                        content.rows = 1;
-                        content.value = String(values?.[row]?.[col] || "");
+                        const content = document.createElement("div");
+                        content.className = "matrix-print-cell matrix-print-cell-editable";
+                        content.textContent = String(values?.[row]?.[col] || "");
+                        content.contentEditable = styleMeta.readonly ? "false" : "true";
                         if (styleMeta.align) content.style.textAlign = styleMeta.align;
                         if (styleMeta.bold) content.style.fontWeight = "700";
                         if (styleMeta.fontSize) content.style.fontSize = String(Math.max(8, Number(styleMeta.fontSize) - 2)) + "px";
-                        if (styleMeta.readonly) content.readOnly = true;
+                        if (styleMeta.readonly) content.setAttribute("aria-readonly", "true");
                         td.appendChild(content);
                         tr.appendChild(td);
                     }
