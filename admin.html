@@ -620,7 +620,7 @@
 
         .matrix-print-wrap {
             width: 100%;
-            overflow: hidden;
+            overflow: auto;
         }
 
         .matrix-print-table {
@@ -647,6 +647,7 @@
 
         .matrix-print-cell-input {
             width: 100%;
+            min-width: 56px;
             min-height: 28px;
             border: 0;
             resize: vertical;
@@ -655,6 +656,7 @@
             line-height: 1.2;
             background: transparent;
             white-space: pre-wrap;
+            box-sizing: border-box;
         }
 
         th, td {
@@ -795,7 +797,7 @@ Lep pozdrav
                     </div>
                     <div id="qText" contenteditable="true" class="rte"></div>
                     <div class="checkbox-row">
-                        <input id="qTextBold" type="checkbox" checked />
+                        <input id="qTextBold" type="checkbox" />
                         <label for="qTextBold" style="margin:0;">Prikaži vprašanje krepko (bold)</label>
                     </div>
 
@@ -886,7 +888,7 @@ PO;TO;SR;ČE;PE;SO;NE
                         </div>
                         <div id="childText" contenteditable="true" class="rte"></div>
                         <div class="checkbox-row">
-                            <input id="childTextBold" type="checkbox" checked />
+                            <input id="childTextBold" type="checkbox" />
                             <label for="childTextBold" style="margin:0;">Prikaži podvprašanje krepko (bold)</label>
                         </div>
 
@@ -1908,13 +1910,13 @@ PO;TO;SR;ČE;PE;SO;NE
         function resetQuestionForm() {
             editIndex = -1;
             qTextEl.innerHTML = "";
-            qTextBoldEl.checked = true;
+            qTextBoldEl.checked = false;
             qTypeEl.value = "yesno";
             hasChildEl.checked = false;
             splitSurveyEl.checked = false;
             childTypeEl.value = "table";
             childTextEl.innerHTML = "";
-            childTextBoldEl.checked = true;
+            childTextBoldEl.checked = false;
             childColumnsEl.value = "";
             matrixRowsEl.value = "3";
             matrixColsEl.value = "7";
@@ -2213,13 +2215,13 @@ PO;TO;SR;ČE;PE;SO;NE
             editIndex = index;
 
               qTextEl.innerHTML = q.text;
-            qTextBoldEl.checked = q.textBold !== false;
+            qTextBoldEl.checked = !!q.textBold;
             qTypeEl.value = q.type;
             hasChildEl.checked = !!q.child;
             splitSurveyEl.checked = !!q.splitSurvey;
             childTypeEl.value = q.child?.type || "table";
               childTextEl.innerHTML = q.child ? q.child.text : "";
-            childTextBoldEl.checked = q.child ? q.child.textBold !== false : true;
+            childTextBoldEl.checked = q.child ? !!q.child.textBold : false;
             childColumnsEl.value = q.child?.type === "text" ? "" : (q.child?.columns || []).join("; ");
             matrixRowsEl.value = String(q.matrix?.rows || 3);
             matrixColsEl.value = String(q.matrix?.cols || 7);
@@ -2277,7 +2279,7 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="question-head">
                 <div>
                     <div class="badge">Vprašanje ${index + 1}</div>
-                    <div style="font-weight:${q.textBold === false ? "400" : "700"};">${renderRichText(applyAdminPlaceholders(q.text))}</div>
+                    <div style="font-weight:${q.textBold ? "700" : "400"};">${renderRichText(applyAdminPlaceholders(q.text))}</div>
 
                     <div class="hint">
                         Tip: ${escapeHtml(
@@ -2304,7 +2306,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                     ${q.child ? `
                         <div class="hint" style="margin-top:6px;">
-                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): <span style="font-weight:${q.child.textBold === false ? "400" : "700"};">${renderRichText(applyAdminPlaceholders(q.child.text))}</span>
+                            Podvprašanje (${escapeHtml(q.child.type === "text" ? "tekstovni odgovor" : "tabela")}): <span style="font-weight:${q.child.textBold ? "700" : "400"};">${renderRichText(applyAdminPlaceholders(q.child.text))}</span>
                             ${q.child.type === "table" ? `<br>Stolpci: ${escapeHtml((q.child.columns || []).join("; "))}` : ""}
                         </div>
                     ` : ""}
@@ -2546,7 +2548,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                         html += `
             <div class="section-question-card">
-                <div class="survey-title" style="font-weight:${q.textBold === false ? "400" : "700"};">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
+                <div class="survey-title" style="font-weight:${q.textBold ? "700" : "400"};">${showQuestionNumber ? `${previewQuestionNumber}. ` : ""}${renderRichText(applyAdminPlaceholders(q.text))}</div>
                     <div class="hint">
                         ${!q.units || q.units.length === 0
                                             ? "Velja za vse enote"
@@ -2574,7 +2576,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                 ${q.child ? `
                     <div class="child-box">
-                        <div class="preserve-wrap" style="font-weight:${q.child.textBold === false ? "400" : "700"};">${renderRichText(applyAdminPlaceholders(q.child.text))}</div>
+                        <div class="preserve-wrap" style="font-weight:${q.child.textBold ? "700" : "400"};">${renderRichText(applyAdminPlaceholders(q.child.text))}</div>
 
                         ${q.child.image ? `
                             <div class="question-image">
@@ -2727,7 +2729,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const normalizedChild = {
                 type,
                 text: child.text || "",
-                textBold: child.textBold !== false,
+                textBold: !!child.textBold,
                 image: child.image || ""
             };
 
@@ -2784,7 +2786,7 @@ PO;TO;SR;ČE;PE;SO;NE
         function normalizeQuestion(question) {
             return {
                 ...question,
-                textBold: question?.textBold !== false,
+                textBold: !!question?.textBold,
                 units: Array.isArray(question.units) ? question.units : [],
                 sectionId: question.sectionId || "",
                 splitSurvey: !!question.splitSurvey,
@@ -4300,6 +4302,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 wrap.className = "matrix-print-wrap";
                 const table = document.createElement("table");
                 table.className = "matrix-print-table";
+                table.style.minWidth = Math.max(640, cols * 62) + "px";
                 const tbody = document.createElement("tbody");
 
                 for (let row = 0; row < rows; row += 1) {
@@ -4406,7 +4409,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 const title = document.createElement("div");
                 title.className = "question-title";
                 title.innerHTML = (showQuestionNumber ? visibleIndex + ". " : "") + applyRuntimePlaceholders(q.text || "");
-                title.style.fontWeight = q.textBold === false ? "400" : "700";
+                title.style.fontWeight = q.textBold ? "700" : "400";
                 card.appendChild(title);
 
                 if (q.image) {
@@ -4538,7 +4541,7 @@ PO;TO;SR;ČE;PE;SO;NE
                         child.className = "child-box";
                         const childTitle = document.createElement("div");
                         childTitle.className = "preserve-wrap";
-                        childTitle.style.fontWeight = q.child.textBold === false ? "400" : "700";
+                        childTitle.style.fontWeight = q.child.textBold ? "700" : "400";
                         childTitle.innerHTML = applyRuntimePlaceholders(q.child.text || "");
                         child.appendChild(childTitle);
 
@@ -4614,7 +4617,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                         const childTitle = document.createElement("div");
                         childTitle.className = "preserve-wrap";
-                        childTitle.style.fontWeight = q.child.textBold === false ? "400" : "700";
+                        childTitle.style.fontWeight = q.child.textBold ? "700" : "400";
                         childTitle.innerHTML = applyRuntimePlaceholders(q.child.text || "");
                         child.appendChild(childTitle);
 
