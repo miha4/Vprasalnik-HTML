@@ -491,6 +491,34 @@
             font-size: 12px;
         }
 
+        .table-cell-input {
+            width: 100%;
+            min-height: 34px;
+            resize: vertical;
+            border: 0;
+            border-radius: 0;
+            padding: 6px 8px;
+            font: inherit;
+            line-height: 1.25;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            background: transparent;
+        }
+
+        .table-cell-input {
+            width: 100%;
+            min-height: 34px;
+            resize: vertical;
+            border: 0;
+            border-radius: 0;
+            padding: 6px 8px;
+            font: inherit;
+            line-height: 1.25;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            background: transparent;
+        }
+
         .matrix-designer {
             margin-top: 8px;
             max-width: 100%;
@@ -620,6 +648,8 @@
             padding: 8px;
             text-align: left;
             vertical-align: top;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
 
         th {
@@ -684,6 +714,12 @@
                     <label for="unitOptions">Enote (ločene s podpičjem)</label>
                     <input id="unitOptions" type="text" value="OKZP;FIS;FDT;BRN;MBX;POW;CEK" />
                     <div class="hint">Primer: OKZP; FIS; FDT</div>
+
+                    <label for="personUnitMap">Uporabniki in enote (vrstica: Ime Priimek;Enota)</label>
+                    <textarea id="personUnitMap" placeholder="Primer:
+Ana Novak;OKZP
+Blaž Kovač;FIS"></textarea>
+                    <div class="hint">Uporabnik bo v vprašalniku izbral sebe iz spustnega seznama, enota pa se izpolni samodejno.</div>
 
                     <label for="surveyLogo">Logotip ankete (neobvezno)</label>
                     <input id="surveyLogo" type="file" accept="image/*" />
@@ -897,6 +933,7 @@ PO;TO;SR;ČE;PE;SO;NE
             pdfFileName: "Vprašalnik {obdobje} - {enota}",
             logo: "",
             units: [...DEFAULT_UNITS],
+            personUnitMap: [],
             sections: [{ id: "sec_1", title: "Del 1", description: "", color: "#eef2ff" }],
             questions: []
         };
@@ -909,6 +946,7 @@ PO;TO;SR;ČE;PE;SO;NE
         const surveyTitleEl = document.getElementById("surveyTitle");
         const surveySubtitleEl = document.getElementById("surveySubtitle");
         const unitOptionsEl = document.getElementById("unitOptions");
+        const personUnitMapEl = document.getElementById("personUnitMap");
         const sectionTitleEl = document.getElementById("sectionTitle");
         const sectionDescriptionEl = document.getElementById("sectionDescription");
         const sectionColorEl = document.getElementById("sectionColor");
@@ -1752,6 +1790,18 @@ PO;TO;SR;ČE;PE;SO;NE
                 .filter(Boolean);
         }
 
+        function parsePersonUnitMap(value) {
+            return String(value || "")
+                .split(/\r?\n/)
+                .map(line => line.trim())
+                .filter(Boolean)
+                .map((line) => {
+                    const [nameRaw, unitRaw] = line.split(";").map(x => (x || "").trim());
+                    return { name: nameRaw || "", unit: unitRaw || "" };
+                })
+                .filter(item => item.name && item.unit);
+        }
+
         function getDefaultSection() {
             return { id: "sec_" + Date.now(), title: "Del 1", description: "", color: "#eef2ff" };
         }
@@ -1824,6 +1874,7 @@ PO;TO;SR;ČE;PE;SO;NE
             state.surveySubtitle = surveySubtitleEl.value.trim() || "";
             const parsedUnits = parseUnits(unitOptionsEl.value);
             state.units = parsedUnits.length ? parsedUnits : [...DEFAULT_UNITS];
+            state.personUnitMap = parsePersonUnitMap(personUnitMapEl.value);
             state.emailRecipient = surveyEmailEl.value.trim();
             state.emailSubject = surveyEmailSubjectEl.value.trim() || "Izpolnjen vprašalnik {obdobje} - {enota}";
             state.emailMessage = surveyEmailMessageEl.value.trim() || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
@@ -1932,10 +1983,17 @@ PO;TO;SR;ČE;PE;SO;NE
             const isYesNo = qTypeEl.value === "yesno";
             const isTextBlock = qTypeEl.value === "text_block";
             const isMatrix = qTypeEl.value === "matrix_table";
+            const supportsChild = isYesNo || isMatrix;
             splitSurveyWrapEl.classList.toggle("hidden", !isTextBlock);
-            hasChildWrapEl.classList.toggle("hidden", !isYesNo);
+            hasChildWrapEl.classList.toggle("hidden", !supportsChild);
+            const childLabel = hasChildWrapEl.querySelector("label");
+            if (childLabel) {
+                childLabel.textContent = isYesNo
+                    ? "Ob odgovoru DA pokaži podvprašanje"
+                    : "Pokaži podvprašanje (s kljukico)";
+            }
             matrixFieldsEl.classList.toggle("hidden", !isMatrix);
-            if (!isYesNo) {
+            if (!supportsChild) {
                 hasChildEl.checked = false;
                 childFieldsEl.classList.add("hidden");
             } else {
@@ -1988,7 +2046,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 throw new Error("Najprej dodaj del ankete in izberi del.");
             }
 
-            if (qTypeEl.value === "yesno" && hasChildEl.checked) {
+            if ((qTypeEl.value === "yesno" || qTypeEl.value === "matrix_table") && hasChildEl.checked) {
                 const childType = childTypeEl.value;
                 const childText = childTextEl.innerHTML.trim();
                 const childImageFile = document.getElementById("childImage").files[0];
@@ -2393,9 +2451,11 @@ PO;TO;SR;ČE;PE;SO;NE
         function renderPreview() {
             syncSettingsFromInputs();
 
-            const unitOptions = state.units
-                .map(unit => `<option value="${escapeHtml(unit)}">${escapeHtml(unit)}</option>`)
+            const mappedPeople = Array.isArray(state.personUnitMap) ? state.personUnitMap : [];
+            const personOptions = mappedPeople
+                .map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</option>`)
                 .join("");
+            const previewUnit = mappedPeople[0]?.unit || "";
 
             let html = `
         <div class="survey-card">
@@ -2411,7 +2471,10 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="survey-top-grid">
                 <div class="full">
                     <label>Ime in priimek</label>
-                    <input type="text" placeholder="Vpiši ime in priimek" />
+                    <select>
+                        <option value="">-- izberi osebo --</option>
+                        ${personOptions}
+                    </select>
                 </div>
         		<div class="date-field">
             			<label for="surveyDate">Datum</label>
@@ -2419,10 +2482,7 @@ PO;TO;SR;ČE;PE;SO;NE
         		</div>
                 <div>
                     <label>Enota</label>
-                    <select>
-                        <option value="">-- izberi enoto --</option>
-                        ${unitOptions}
-                    </select>
+                    <input type="text" value="${escapeHtml(previewUnit)}" readonly />
                 </div>
             </div>
         </div>
@@ -2500,7 +2560,7 @@ PO;TO;SR;ČE;PE;SO;NE
                                     <tr>${(q.child.columns || []).map(col => `<th>${escapeHtml(col)}</th>`).join("")}</tr>
                                 </thead>
                                 <tbody>
-                                    <tr>${(q.child.columns || []).map(() => `<td><input type="text" /></td>`).join("")}</tr>
+                                    <tr>${(q.child.columns || []).map(() => `<td><textarea class="table-cell-input" rows="2"></textarea></td>`).join("")}</tr>
                                 </tbody>
                             </table>
                             <button type="button" style="margin-top:10px;">+ Dodaj vrstico</button>
@@ -2516,7 +2576,6 @@ PO;TO;SR;ČE;PE;SO;NE
                         <div class="btns">
                             <button type="button">Natisni / Shrani v PDF</button>
                             <button type="button">Shrani PDF in pošlji</button>
-                            <button type="button">Shrani vprašalnik</button>
                         </div>
                     </div>
                 </div>`;
@@ -2587,6 +2646,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     state.surveyTitle = data.surveyTitle || "Vprašalnik {obdobje}";
                     state.surveySubtitle = data.surveySubtitle || "";
                     state.units = Array.isArray(data.units) ? data.units : [];
+                    state.personUnitMap = Array.isArray(data.personUnitMap) ? data.personUnitMap : [];
                     state.sections = migrateLegacyConfig(data);
                     state.emailRecipient = data.emailRecipient || "";
                     state.emailSubject = data.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
@@ -2601,6 +2661,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     surveyTitleEl.value = state.surveyTitle;
                     surveySubtitleEl.value = state.surveySubtitle;
                     unitOptionsEl.value = (state.units && state.units.length ? state.units : DEFAULT_UNITS).join(";");
+                    personUnitMapEl.value = (state.personUnitMap || []).map(item => `${item.name || ""};${item.unit || ""}`).join("\n");
                     renderSectionOverview();
                     surveyEmailEl.value = state.emailRecipient || "";
                     surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
@@ -2951,6 +3012,8 @@ PO;TO;SR;ČE;PE;SO;NE
             padding: 8px;
             text-align: left;
             vertical-align: top;
+            white-space: normal;
+            overflow-wrap: anywhere;
         }
 
         th {
@@ -3169,7 +3232,9 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="top-grid">
                 <div class="full">
                     <label for="personName">Ime in priimek</label>
-                    <input id="personName" type="text" />
+                    <select id="personName">
+                        <option value="">-- izberi osebo --</option>
+                    </select>
                 </div>
 
             <div class="date-field">
@@ -3178,10 +3243,9 @@ PO;TO;SR;ČE;PE;SO;NE
                 </div>
 
                 <div>
-                    <label for="surveyUnit">Enota</label>
-                    <select id="surveyUnit">
-                        <option value="">-- izberi enoto --</option>
-                    </select>
+                    <label for="surveyUnitDisplay">Enota</label>
+                    <input id="surveyUnitDisplay" type="text" readonly />
+                    <input id="surveyUnit" type="hidden" />
                 </div>
             </div>
                 <button type="button" id="resetAnswersBtn">Počisti odgovore</button>
@@ -3194,7 +3258,7 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="btns main-actions">
                 <button type="button" id="printPdfBtn">Natisni / Shrani cel vprašalnik v PDF</button>
                 <button type="button" id="printAndMailBtn">Shrani cel vprašalnik v PDF in pošlji</button>
-                <button type="button" id="saveDraftBtn">Shrani cel vprašalnik</button>
+                <button type="button" id="saveDraftBtn">Shrani vprašalnik</button>
             </div>
 
             <div class="muted preserve-wrap" style="margin-top:10px;">
@@ -3202,8 +3266,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
                 • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
                 • Konfiguracije se shranijo v .csv datoteko, ki jo morate ročno pripeti v email.
-                • Shrani vprašalnik: shrani trenutno stanje odgovorov v novo .html datoteko.
-                • Za nadaljevanje kasneje odpri shranjeno .html datoteko.
+                • Shrani vprašalnik: v trenutno datoteko zapiše vse do zdaj vnesene odgovore.
+                • Za nadaljevanje kasneje ponovno odpri isto .html datoteko.
             </div>
             <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
         </div>
@@ -3257,12 +3321,18 @@ PO;TO;SR;ČE;PE;SO;NE
             const units = Array.isArray(source.units) && source.units.length
                 ? source.units
                 : parseUnits(source.unitOptions || source.unitOption || "");
+            const personUnitMap = Array.isArray(source.personUnitMap)
+                ? source.personUnitMap
+                    .map(item => ({ name: String(item?.name || "").trim(), unit: String(item?.unit || "").trim() }))
+                    .filter(item => item.name && item.unit)
+                : [];
 
             return {
                 ...source,
                 sections,
                 questions,
-                units
+                units,
+                personUnitMap
             };
         }
 
@@ -3278,11 +3348,19 @@ PO;TO;SR;ČE;PE;SO;NE
             return result;
         }
 
+        function getSelectedPersonName() {
+            return (document.getElementById("personName")?.value || "").trim();
+        }
+
+        function getSelectedUnitValue() {
+            return (document.getElementById("surveyUnit")?.value || "").trim();
+        }
+
         function getRuntimePlaceholderValues() {
             return {
                 obdobje: (RUNTIME_CONFIG.surveyPeriod || "").trim(),
-                enota: (document.getElementById("surveyUnit")?.value || "").trim(),
-                imeinpriimek: (document.getElementById("personName")?.value || "").trim()
+                enota: getSelectedUnitValue(),
+                imeinpriimek: getSelectedPersonName()
             };
         }
 
@@ -3295,7 +3373,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const personName = (personNameInput.value || "").trim();
             if (personName) return personName;
 
-            alert("Vnesite ime in priimek.");
+            alert("Izberite ime in priimek.");
             personNameInput.focus();
             return "";
         }
@@ -3305,9 +3383,10 @@ PO;TO;SR;ČE;PE;SO;NE
 
             columns.forEach(() => {
                 const td = document.createElement("td");
-                const input = document.createElement("input");
-                input.type = "text";
-                td.appendChild(input);
+                const textarea = document.createElement("textarea");
+                textarea.className = "table-cell-input";
+                textarea.rows = 2;
+                td.appendChild(textarea);
                 tr.appendChild(td);
             });
 
@@ -3506,7 +3585,7 @@ PO;TO;SR;ČE;PE;SO;NE
                             childAnswer.text = childBox?.querySelector(".answer-textarea")?.value || "";
                         } else if (childBox) {
                             childAnswer.rows = Array.from(childBox.querySelectorAll("tbody tr")).map(tr =>
-                                Array.from(tr.querySelectorAll("input")).map(input => input.value || "")
+                                Array.from(tr.querySelectorAll("textarea, input")).map(input => input.value || "")
                             );
                         }
 
@@ -3531,12 +3610,31 @@ PO;TO;SR;ČE;PE;SO;NE
             return html;
         }
 
-        async function saveDraftToFile(sectionIndex = null) {
-            const draft = collectDraft(sectionIndex);
-            const suffix = sectionIndex == null ? "" : "-del-" + sectionIndex;
-            const fileName = "Vprašalnik-osnutek" + suffix + ".html";
+        let DRAFT_FILE_HANDLE = null;
+
+        async function saveDraftToFile() {
+            const draft = collectDraft(null);
+            const fileName = "Vprašalnik.html";
             const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
-            downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
+
+            if (window.showSaveFilePicker) {
+                try {
+                    if (!DRAFT_FILE_HANDLE) {
+                        DRAFT_FILE_HANDLE = await window.showSaveFilePicker({
+                            suggestedName: fileName,
+                            types: [{ description: "HTML datoteka", accept: { "text/html": [".html"] } }]
+                        });
+                    }
+                    const writable = await DRAFT_FILE_HANDLE.createWritable();
+                    await writable.write(htmlWithDraft);
+                    await writable.close();
+                } catch (err) {
+                    if (err?.name === "AbortError") return;
+                    downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
+                }
+            } else {
+                downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
+            }
 
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
@@ -3572,10 +3670,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 return;
             }
 
-            const selectedUnit = draft.selectedUnit || "";
             document.getElementById("personName").value = draft.personName || "";
             document.getElementById("surveyDate").value = draft.surveyDate || "";
-            document.getElementById("surveyUnit").value = selectedUnit;
             renderSurvey();
 
             const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
@@ -3638,7 +3734,7 @@ PO;TO;SR;ČE;PE;SO;NE
                                 answer.child.rows.forEach(row => {
                                     addRow(tbody, columns);
                                     const tr = tbody.lastElementChild;
-                                    Array.from(tr.querySelectorAll("input")).forEach((input, colIndex) => {
+                                    Array.from(tr.querySelectorAll("textarea, input")).forEach((input, colIndex) => {
                                         input.value = row[colIndex] || "";
                                     });
                                 });
@@ -3721,7 +3817,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 ".btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
                 "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
-                "input,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent}.cell-text{white-space:pre-wrap}</style>" +
+                "textarea,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25}.cell-text{white-space:pre-wrap}</style>" +
                 "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠTER ZA KONFIGURACIJE</div>" +
                 "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
@@ -3782,15 +3878,15 @@ PO;TO;SR;ČE;PE;SO;NE
                         div.dataset.col = String(col);
                         td.appendChild(div);
                     } else {
-                        const input = popupDoc.createElement("input");
-                        input.type = "text";
-                        input.value = value;
-                        if (styleMeta.align) input.style.textAlign = styleMeta.align;
-                        if (styleMeta.bold) input.style.fontWeight = "700";
-                        if (styleMeta.fontSize) input.style.fontSize = String(styleMeta.fontSize) + "px";
-                        input.dataset.row = String(row);
-                        input.dataset.col = String(col);
-                        td.appendChild(input);
+                        const textarea = popupDoc.createElement("textarea");
+                        textarea.rows = 2;
+                        textarea.value = value;
+                        if (styleMeta.align) textarea.style.textAlign = styleMeta.align;
+                        if (styleMeta.bold) textarea.style.fontWeight = "700";
+                        if (styleMeta.fontSize) textarea.style.fontSize = String(styleMeta.fontSize) + "px";
+                        textarea.dataset.row = String(row);
+                        textarea.dataset.col = String(col);
+                        td.appendChild(textarea);
                     }
                     tr.appendChild(td);
                 }
@@ -3865,7 +3961,6 @@ PO;TO;SR;ČE;PE;SO;NE
                 '<div class="btns">' +
                     '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
                     '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji</button>' +
-                    '<button type="button" data-section-action="save" data-section="' + sectionIndex + '">Shrani vprašalnik</button>' +
                 '</div>';
             return card;
         }
@@ -3958,20 +4053,29 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         function renderSurvey() {
-            const unitSelect = document.getElementById("surveyUnit");
+            const personSelect = document.getElementById("personName");
+            const unitHiddenInput = document.getElementById("surveyUnit");
+            const unitDisplayInput = document.getElementById("surveyUnitDisplay");
+            const previousPerson = personSelect.value;
+            const people = Array.isArray(RUNTIME_CONFIG.personUnitMap) ? RUNTIME_CONFIG.personUnitMap : [];
 
-            const previousSelection = unitSelect.value;
-            unitSelect.innerHTML = '<option value="">-- izberi enoto --</option>';
-            (RUNTIME_CONFIG.units || []).forEach(unit => {
+            personSelect.innerHTML = '<option value="">-- izberi osebo --</option>';
+            people.forEach((entry) => {
                 const opt = document.createElement("option");
-                opt.value = unit;
-                opt.textContent = unit;
-                unitSelect.appendChild(opt);
+                opt.value = entry.name;
+                opt.textContent = entry.name;
+                personSelect.appendChild(opt);
             });
-            if (previousSelection) {
-                unitSelect.value = previousSelection;
+
+            if (previousPerson) {
+                personSelect.value = previousPerson;
             }
-            const selectedUnit = unitSelect.value;
+
+            const selectedPerson = personSelect.value || "";
+            const selectedPersonEntry = people.find(entry => entry.name === selectedPerson);
+            const selectedUnit = selectedPersonEntry?.unit || "";
+            unitHiddenInput.value = selectedUnit;
+            unitDisplayInput.value = selectedUnit;
             const container = document.getElementById("surveyContainer");
             let visibleIndex = 0;
             const sections = Array.isArray(RUNTIME_CONFIG.sections) && RUNTIME_CONFIG.sections.length
@@ -4146,6 +4250,72 @@ PO;TO;SR;ČE;PE;SO;NE
                     card.appendChild(openFullscreenBtn);
 
                     renderSavedMatrix();
+
+                    if (q.child) {
+                        const toggleWrap = document.createElement("label");
+                        toggleWrap.className = "checkbox-row";
+                        toggleWrap.style.marginTop = "12px";
+                        const toggle = document.createElement("input");
+                        toggle.type = "checkbox";
+                        toggleWrap.appendChild(toggle);
+                        toggleWrap.append(" Pokaži podvprašanje");
+                        card.appendChild(toggleWrap);
+
+                        const child = document.createElement("div");
+                        child.className = "child-box hidden";
+                        const childTitle = document.createElement("div");
+                        childTitle.className = "preserve-wrap";
+                        const strong = document.createElement("strong");
+                        strong.innerHTML = applyRuntimePlaceholders(q.child.text || "");
+                        childTitle.appendChild(strong);
+                        child.appendChild(childTitle);
+
+                        if (q.child.image) {
+                            const childImgWrap = document.createElement("div");
+                            childImgWrap.className = "question-image";
+                            const childImg = document.createElement("img");
+                            childImg.src = q.child.image;
+                            childImg.alt = "Slika podvprašanja";
+                            childImgWrap.appendChild(childImg);
+                            child.appendChild(childImgWrap);
+                        }
+
+                        if (q.child.type === "text") {
+                            const textarea = document.createElement("textarea");
+                            textarea.className = "answer-textarea";
+                            textarea.placeholder = "Vpiši odgovor...";
+                            child.appendChild(textarea);
+                        } else {
+                            const table = document.createElement("table");
+                            const thead = document.createElement("thead");
+                            const headRow = document.createElement("tr");
+                            (q.child.columns || []).forEach(col => {
+                                const th = document.createElement("th");
+                                th.textContent = col;
+                                headRow.appendChild(th);
+                            });
+                            thead.appendChild(headRow);
+                            table.appendChild(thead);
+
+                            const tbody = document.createElement("tbody");
+                            table.appendChild(tbody);
+                            addRow(tbody, q.child.columns || []);
+                            child.appendChild(table);
+
+                            const addBtn = document.createElement("button");
+                            addBtn.type = "button";
+                            addBtn.className = "no-print";
+                            addBtn.textContent = "+ Dodaj vrstico";
+                            addBtn.style.marginTop = "10px";
+                            addBtn.addEventListener("click", () => addRow(tbody, q.child.columns || []));
+                            child.appendChild(addBtn);
+                        }
+
+                        toggle.addEventListener("change", () => {
+                            child.classList.toggle("hidden", !toggle.checked);
+                        });
+                        card.appendChild(child);
+                    }
                 } else if (q.type === "yesno") {
                     const yesno = document.createElement("div");
                     yesno.className = "yesno";
@@ -4259,8 +4429,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
             renderMatrixPrintAppendix();
         }
-
-        document.getElementById("surveyUnit").addEventListener("change", () => {
+        document.getElementById("personName").addEventListener("change", () => {
             updateDocumentTitleForPdf();
             renderSurvey();
             try {
@@ -4303,8 +4472,6 @@ PO;TO;SR;ČE;PE;SO;NE
                 if (mailOpened) {
                     setTimeout(() => printSection(sectionIndex), 250);
                 }
-            } else if (action === "save") {
-                saveDraftToFile(sectionIndex);
             }
         });
 
@@ -4404,6 +4571,7 @@ PO;TO;SR;ČE;PE;SO;NE
             renderUnitCheckboxes(selected);
             renderPreview();
         });
+        on(personUnitMapEl, "input", renderPreview);
         on(document.getElementById("saveSectionBtn"), "click", saveSection);
         on(document.getElementById("resetSectionBtn"), "click", resetSectionForm);
 
@@ -4448,6 +4616,7 @@ PO;TO;SR;ČE;PE;SO;NE
             surveyTitleEl.value = state.surveyTitle || "Vprašalnik {obdobje}";
             surveySubtitleEl.value = state.surveySubtitle || "";
             unitOptionsEl.value = state.units.join(";");
+            personUnitMapEl.value = (state.personUnitMap || []).map(item => `${item.name || ""};${item.unit || ""}`).join("\n");
             surveyEmailEl.value = state.emailRecipient || "";
             surveyEmailSubjectEl.value = state.emailSubject || "Izpolnjen vprašalnik {obdobje} - {enota}";
             surveyEmailMessageEl.value = state.emailMessage || "Pozdravljeni,\n\nv prilogi pošiljam izpolnjen PDF ankete za enoto {enota}.\n\nLep pozdrav\n{imeinpriimek}";
