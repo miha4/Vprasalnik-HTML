@@ -1990,7 +1990,7 @@ PO;TO;SR;ČE;PE;SO;NE
             if (childLabel) {
                 childLabel.textContent = isYesNo
                     ? "Ob odgovoru DA pokaži podvprašanje"
-                    : "Pokaži podvprašanje (s kljukico)";
+                    : "Prikaži podvprašanje";
             }
             matrixFieldsEl.classList.toggle("hidden", !isMatrix);
             if (!supportsChild) {
@@ -4252,17 +4252,8 @@ PO;TO;SR;ČE;PE;SO;NE
                     renderSavedMatrix();
 
                     if (q.child) {
-                        const toggleWrap = document.createElement("label");
-                        toggleWrap.className = "checkbox-row";
-                        toggleWrap.style.marginTop = "12px";
-                        const toggle = document.createElement("input");
-                        toggle.type = "checkbox";
-                        toggleWrap.appendChild(toggle);
-                        toggleWrap.append(" Pokaži podvprašanje");
-                        card.appendChild(toggleWrap);
-
                         const child = document.createElement("div");
-                        child.className = "child-box hidden";
+                        child.className = "child-box";
                         const childTitle = document.createElement("div");
                         childTitle.className = "preserve-wrap";
                         const strong = document.createElement("strong");
@@ -4310,10 +4301,6 @@ PO;TO;SR;ČE;PE;SO;NE
                             addBtn.addEventListener("click", () => addRow(tbody, q.child.columns || []));
                             child.appendChild(addBtn);
                         }
-
-                        toggle.addEventListener("change", () => {
-                            child.classList.toggle("hidden", !toggle.checked);
-                        });
                         card.appendChild(child);
                     }
                 } else if (q.type === "yesno") {
