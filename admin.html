@@ -3384,12 +3384,10 @@ PO;TO;SR;ČE;PE;SO;NE
             </div>
 
             <div class="muted preserve-wrap" style="margin-top:10px;">
-                Izpolnjevanje se sproti shranjuje lokalno v tem brskalniku.
-                • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv.
-                • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF (PDF pripnete ročno).
-                • Konfiguracije se shranijo v .csv datoteko, ki jo morate ročno pripeti v email.
-                • Shrani vprašalnik: v trenutno datoteko zapiše vse do zdaj vnesene odgovore.
-                • Za nadaljevanje kasneje ponovno odpri isto .html datoteko.
+		POMOČ:
+                • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv. Nekateri uporabniki boste izpolnili tudi tabelo mušter za konfiguracije, ki se 					  bodo prenesele v .csv formatu v prenose.
+                • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF. PDF in mušter za konfiguracije (.csv datoteka) morate pripeti ROČNO.
+                • Shrani vprašalnik: Shrani .html verzijo vprašalnika z odgovori. Načeloma se shranijo tudi odgovori v izvorni datoteki.
             </div>
             <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
         </div>
@@ -3990,8 +3988,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 ".topbar .title-wrap{margin-right:auto}.topbar .title{font-weight:700}.topbar .subtitle{font-size:12px;color:#475569;margin-top:4px}" +
                 ".btn{border:1px solid #0f172a;background:#111827;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer}" +
                 ".btn.secondary{background:#fff;color:#111827}.wrap{padding:12px;overflow:auto}.scroll{overflow:auto;border:1px solid #cfd8e3;background:#fff}" +
-                "table{border-collapse:collapse;table-layout:fixed;width:100%;min-width:100%}td{border:1px solid #d0d7de;padding:0;background:#fff;position:relative;height:30px;vertical-align:top}.readonly{background:#f8fafc}" +
-                "textarea,.cell-text{position:absolute;inset:0;width:100%;height:100%;min-width:0;min-height:0;border:0;border-radius:0;padding:4px;margin:0;font-size:12px;text-align:center;background:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;resize:none;box-sizing:border-box;display:block}textarea.cell-selected{background:#dbeafe;outline:2px solid #2563eb;outline-offset:-2px}.cell-text{white-space:nowrap}</style>" +
+                "table{border-collapse:collapse;table-layout:fixed;min-width:1200px}td{border:1px solid #d0d7de;padding:0;background:#fff}.readonly{background:#f8fafc}" +
+                "textarea,.cell-text{width:100%;min-width:38px;border:0;padding:6px 4px;font-size:12px;text-align:center;background:transparent;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.25;resize:none;overflow:hidden}textarea.cell-selected{background:#dbeafe;outline:2px solid #2563eb;outline-offset:-2px}.cell-text{white-space:pre-wrap}</style>" +
                 "</head><body><div class='topbar'><div class='title-wrap'><div class='title'>MUŠTER ZA KONFIGURACIJE</div>" +
                 "<div class='subtitle'>Pri shranjevanju se bo shranila tudi .csv datoteka z Muštrom za konfiguracije, ki jo prosim priložite med priloge emaila.</div></div>" +
                 "<button class='btn secondary' id='backBtn'>Nazaj brez shranjevanja</button><button class='btn' id='saveBtn'>Shrani in zapri</button>" +
@@ -4123,12 +4121,16 @@ PO;TO;SR;ČE;PE;SO;NE
                         const textarea = popupDoc.createElement("textarea");
                         textarea.rows = 1;
                         textarea.value = value;
-                        textarea.spellcheck = false;
                         if (styleMeta.align) textarea.style.textAlign = styleMeta.align;
                         if (styleMeta.bold) textarea.style.fontWeight = "700";
                         if (styleMeta.fontSize) textarea.style.fontSize = String(styleMeta.fontSize) + "px";
                         textarea.dataset.row = String(row);
                         textarea.dataset.col = String(col);
+                        const popupResize = () => {
+                            textarea.style.height = "auto";
+                            textarea.style.height = textarea.scrollHeight + "px";
+                        };
+                        textarea.addEventListener("input", popupResize);
                         textarea.addEventListener("mousedown", (event) => {
                             const currentKey = keyOf(row, col);
                             const additive = event.ctrlKey || event.metaKey;
@@ -4183,6 +4185,7 @@ PO;TO;SR;ČE;PE;SO;NE
                                 event.preventDefault();
                             }
                         });
+                        popupResize();
                         td.appendChild(textarea);
                     }
                     tr.appendChild(td);
