@@ -4213,20 +4213,68 @@ PO;TO;SR;ČE;PE;SO;NE
                 })
             );
 
+            const persistMatrixAutosave = () => {
+                const snapshotRows = normalizeMatrixRows(collectRows(), rows, cols);
+                const totalMatrices = document.querySelectorAll("#surveyContainer .section-question-card[data-question-type='matrix_table']").length || 1;
+                const fileName = getMatrixCsvFileName(Number(questionIndex), totalMatrices);
+                const csv = matrixValuesToCsv(snapshotRows);
+                MATRIX_EDITOR_STATE.set(Number(questionIndex), {
+                    rows: snapshotRows,
+                    csv,
+                    fileName,
+                    saved: true
+                });
+                MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+                try {
+                    localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
+                } catch {}
+            };
+
+            host.addEventListener("input", () => {
+                persistMatrixAutosave();
+            });
+
+            popup.addEventListener("beforeunload", () => {
+                persistMatrixAutosave();
+            });
+
+            popup.addEventListener("pagehide", () => {
+                persistMatrixAutosave();
+            });
+
             popupDoc.getElementById("backBtn").addEventListener("click", () => popup.close());
             popupDoc.getElementById("saveBtn").addEventListener("click", () => {
                 const nextRows = collectRows();
                 const totalMatrices = document.querySelectorAll("#surveyContainer .section-question-card[data-question-type='matrix_table']").length || 1;
                 const fileName = getMatrixCsvFileName(Number(questionIndex), totalMatrices);
                 const csv = matrixValuesToCsv(nextRows);
+                const normalizedRows = normalizeMatrixRows(nextRows, rows, cols);
+                const draftSnapshot = collectDraft();
+
                 MATRIX_EDITOR_STATE.set(Number(questionIndex), {
-                    rows: normalizeMatrixRows(nextRows, rows, cols),
+                    rows: normalizedRows,
                     csv,
                     fileName,
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+
+                const answers = Array.isArray(draftSnapshot.answers) ? draftSnapshot.answers : [];
+                const existingAnswer = answers.find((answer) => Number(answer.questionIndex) === Number(questionIndex));
+                if (existingAnswer) {
+                    existingAnswer.matrixRows = normalizedRows;
+                    existingAnswer.matrixCsv = csv;
+                } else {
+                    answers.push({
+                        questionIndex: Number(questionIndex),
+                        matrixRows: normalizedRows,
+                        matrixCsv: csv
+                    });
+                }
+                draftSnapshot.answers = answers;
+
                 renderSurvey();
+                applyDraft(draftSnapshot);
                 try {
                     localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
                 } catch {}
@@ -4736,6 +4784,12 @@ PO;TO;SR;ČE;PE;SO;NE
 
         document.addEventListener("input", (event) => {
             if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            try {
+                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
+            } catch {}
+        });
+
+        window.addEventListener("pagehide", () => {
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
             } catch {}
