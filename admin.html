@@ -3785,36 +3785,17 @@ PO;TO;SR;ČE;PE;SO;NE
             return html;
         }
 
-        let DRAFT_FILE_HANDLE = null;
-
         async function saveDraftToFile() {
             const draft = collectDraft(null);
             const fileName = "Vprašalnik.html";
             const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
 
-            if (window.showSaveFilePicker) {
-                try {
-                    if (!DRAFT_FILE_HANDLE) {
-                        DRAFT_FILE_HANDLE = await window.showSaveFilePicker({
-                            suggestedName: fileName,
-                            types: [{ description: "HTML datoteka", accept: { "text/html": [".html"] } }]
-                        });
-                    }
-                    const writable = await DRAFT_FILE_HANDLE.createWritable();
-                    await writable.write(htmlWithDraft);
-                    await writable.close();
-                } catch (err) {
-                    if (err?.name === "AbortError") return;
-                    downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
-                }
-            } else {
-                downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
-            }
+            downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
 
             try {
                 localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
             } catch {}
-            alert("Vprašalnik je shranjen.");
+            alert("Vprašalnik je shranjen kot nova HTML datoteka (prenos). Odpri to datoteko za nadaljevanje.");
         }
 
         function clearDraftBackup() {
