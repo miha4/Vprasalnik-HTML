@@ -3396,6 +3396,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 • Shrani vprašalnik: Shrani .html verzijo vprašalnika z odgovori. Načeloma se shranijo tudi odgovori v izvorni datoteki.
             </div>
             <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
+            <div id="draftStatus" class="muted" style="margin-top:6px;">Osnutek je samodejno shranjen v tem brskalniku.</div>
+            <div id="fileSaveStatus" class="muted" style="margin-top:4px;"></div>
         </div>
     </div>
 
@@ -3492,6 +3494,58 @@ PO;TO;SR;ČE;PE;SO;NE
 
         function applyRuntimePlaceholders(template) {
             return applyTemplatePlaceholders(template, getRuntimePlaceholderValues());
+        }
+
+        function simpleHash(input) {
+            const value = String(input || "");
+            let hash = 0;
+            for (let i = 0; i < value.length; i += 1) {
+                hash = (hash * 31 + value.charCodeAt(i)) >>> 0;
+            }
+            return hash.toString(16).padStart(8, "0");
+        }
+
+        function getSurveyId() {
+            if (RUNTIME_CONFIG.surveyId) return String(RUNTIME_CONFIG.surveyId);
+            const base = JSON.stringify({
+                period: RUNTIME_CONFIG.surveyPeriod || "",
+                title: RUNTIME_CONFIG.surveyTitle || "",
+                questions: Array.isArray(RUNTIME_CONFIG.questions)
+                    ? RUNTIME_CONFIG.questions.map((q) => ({
+                        text: q?.text || "",
+                        type: q?.type || "",
+                        childText: q?.child?.text || "",
+                        matrix: q?.matrix || null
+                    }))
+                    : []
+            });
+            return "sid_" + simpleHash(base);
+        }
+
+        function getDraftStorageKey() {
+            const period = (RUNTIME_CONFIG.surveyPeriod || "brez-obdobja").trim() || "brez-obdobja";
+            return "VprasalnikDraftBackup::" + period + "::" + getSurveyId();
+        }
+
+        function loadDraftBackup() {
+            try {
+                const preferred = localStorage.getItem(getDraftStorageKey());
+                if (preferred) return JSON.parse(preferred);
+            } catch {}
+            // Fallback za stare vprašalnike (legacy ključ) samo če novega ključa ni.
+            try {
+                const legacy = localStorage.getItem("VprašalnikDraftBackup");
+                if (legacy) return JSON.parse(legacy);
+            } catch {}
+            return null;
+        }
+
+        function saveDraftBackup() {
+            try {
+                localStorage.setItem(getDraftStorageKey(), JSON.stringify(collectDraft()));
+            } catch {}
+            const status = document.getElementById("draftStatus");
+            if (status) status.textContent = "Osnutek je samodejno shranjen v tem brskalniku.";
         }
 
         function requirePersonName() {
@@ -3724,10 +3778,15 @@ PO;TO;SR;ČE;PE;SO;NE
 
             return {
                 version: 1,
+                draftVersion: 2,
+                savedAt: new Date().toISOString(),
+                surveyPeriod: RUNTIME_CONFIG.surveyPeriod || "",
+                surveyId: getSurveyId(),
                 surveyTitle: RUNTIME_CONFIG.surveyTitle || "",
                 sectionIndex: sectionIndex == null ? null : Number(sectionIndex),
                 selectedUnit: document.getElementById("surveyUnit").value || "",
                 personName: document.getElementById("personName").value || "",
+                surveyUnit: document.getElementById("surveyUnit").value || "",
                 surveyDate: document.getElementById("surveyDate").value || "",
                 answers: cards.map((card) => {
                     const questionIndex = Number(card.dataset.questionIndex);
@@ -3772,12 +3831,28 @@ PO;TO;SR;ČE;PE;SO;NE
             };
         }
 
+        function getCleanHtmlForDraftSave() {
+            const clone = document.documentElement.cloneNode(true);
+            const cleanContainer = clone.querySelector("#surveyContainer");
+            if (cleanContainer) cleanContainer.innerHTML = "";
+            const cleanAppendix = clone.querySelector("#matrixPrintAppendix");
+            if (cleanAppendix) cleanAppendix.innerHTML = "";
+            const draftStatus = clone.querySelector("#draftStatus");
+            if (draftStatus) draftStatus.textContent = "";
+            const fileSaveStatus = clone.querySelector("#fileSaveStatus");
+            if (fileSaveStatus) fileSaveStatus.textContent = "";
+            const outputDirStatus = clone.querySelector("#outputDirStatus");
+            if (outputDirStatus) outputDirStatus.textContent = "";
+            return "<!DOCTYPE html>\\n" + clone.outerHTML;
+        }
+
         function injectDraftIntoCurrentHtml(draft) {
-            const html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
+            const html = getCleanHtmlForDraftSave();
             const safeJson = JSON.stringify(draft)
                 .replace(/</g, "\\u003c")
                 .replace(/>/g, "\\u003e")
                 .replace(/&/g, "\\u0026");
+            // savedDraftData hrani odgovore, CONFIG hrani strukturo vprašanj; runtime DOM se ne sme trajno shranjevati.
             const pattern = /(<template id="savedDraftData">)([\\s\\S]*?)(<\\/template>)/;
             if (pattern.test(html)) {
                 return html.replace(pattern, "$1" + safeJson + "$3");
@@ -3787,19 +3862,22 @@ PO;TO;SR;ČE;PE;SO;NE
 
         async function saveDraftToFile() {
             const draft = collectDraft(null);
-            const fileName = "Vprašalnik.html";
+            const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
+            const fileName = (String(base || "Vprašalnik")
+                .replace(/[\\/:*?"<>|]+/g, "-")
+                .replace(/\s+/g, " ")
+                .trim() || "Vprašalnik") + ".html";
             const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
 
             downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
-
-            try {
-                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(draft));
-            } catch {}
-            alert("Vprašalnik je shranjen kot nova HTML datoteka (prenos). Odpri to datoteko za nadaljevanje.");
+            saveDraftBackup();
+            const status = document.getElementById("fileSaveStatus");
+            if (status) status.textContent = "Vprašalnik je shranjen kot nova HTML datoteka.";
         }
 
         function clearDraftBackup() {
             try {
+                localStorage.removeItem(getDraftStorageKey());
                 localStorage.removeItem("VprašalnikDraftBackup");
             } catch {}
         }
@@ -3903,9 +3981,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
             });
 
-            try {
-                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-            } catch {}
+            saveDraftBackup();
         }
 
         function getPdfFileName() {
@@ -4206,9 +4282,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
-                try {
-                    localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-                } catch {}
+                saveDraftBackup();
             };
 
             host.addEventListener("input", () => {
@@ -4256,9 +4330,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
                 renderSurvey();
                 applyDraft(draftSnapshot);
-                try {
-                    localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-                } catch {}
+                saveDraftBackup();
                 popup.close();
             });
         }
@@ -4758,22 +4830,16 @@ PO;TO;SR;ČE;PE;SO;NE
         document.getElementById("personName").addEventListener("change", () => {
             updateDocumentTitleForPdf();
             renderSurvey();
-            try {
-                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-            } catch {}
+            saveDraftBackup();
         });
 
         document.addEventListener("input", (event) => {
             if (!event.target.closest("#surveyContainer, .top-grid")) return;
-            try {
-                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-            } catch {}
+            saveDraftBackup();
         });
 
         window.addEventListener("pagehide", () => {
-            try {
-                localStorage.setItem("VprašalnikDraftBackup", JSON.stringify(collectDraft()));
-            } catch {}
+            saveDraftBackup();
         });
 
         window.addEventListener("beforeprint", () => {
@@ -4819,21 +4885,21 @@ PO;TO;SR;ČE;PE;SO;NE
         updateDocumentTitleForPdf();
         renderSurvey();
 
+        let embeddedDraftLoaded = false;
         try {
             const embeddedDraftText = document.getElementById("savedDraftData")?.textContent || "";
             if (embeddedDraftText.trim()) {
                 applyDraft(JSON.parse(embeddedDraftText));
+                embeddedDraftLoaded = true;
             }
         } catch {
             console.warn("Vgrajenega osnutka ni bilo mogoče prebrati.");
         }
 
-        try {
-            const backup = localStorage.getItem("VprašalnikDraftBackup");
-            if (backup) {
-                applyDraft(JSON.parse(backup));
-            }
-        } catch {}
+        if (!embeddedDraftLoaded) {
+            const backup = loadDraftBackup();
+            if (backup) applyDraft(backup);
+        }
     ${"</scr" + "ipt>"}
 </body>
 </html>`;
