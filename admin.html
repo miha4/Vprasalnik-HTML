@@ -2612,7 +2612,6 @@ PO;TO;SR;ČE;PE;SO;NE
                     <div class="section-actions-card">
                         <div class="btns">
                             <button type="button">Natisni / Shrani v PDF</button>
-                            <button type="button">Shrani PDF in pošlji</button>
                         </div>
                     </div>
                 </div>`;
@@ -3219,7 +3218,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
         .main-actions {
             display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: minmax(220px, 1fr);
             gap: 10px;
         }
 
@@ -3228,9 +3227,57 @@ PO;TO;SR;ČE;PE;SO;NE
             min-width: 0;
         }
 
+        .main-actions .primary-save {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+            font-weight: 700;
+            font-size: 16px;
+            padding: 14px 18px;
+        }
+
+        .main-actions .primary-save:hover {
+            background: #1d4ed8;
+        }
+
+        .main-actions .primary-save:disabled {
+            cursor: wait;
+            opacity: 0.72;
+        }
+
+        .save-help {
+            margin-top: 10px;
+            line-height: 1.45;
+        }
+
+        .save-status {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+        }
+
+        .save-status.success {
+            color: #166534;
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+        }
+
+        .save-status.warning {
+            color: #92400e;
+            background: #fffbeb;
+            border-color: #fde68a;
+        }
+
+        .save-status.error {
+            color: #991b1b;
+            background: #fef2f2;
+            border-color: #fecaca;
+        }
+
         @media (max-width: 1100px) {
-            .section-actions-card .btns,
-            .main-actions {
+            .section-actions-card .btns {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
             }
         }
@@ -3384,20 +3431,20 @@ PO;TO;SR;ČE;PE;SO;NE
 
         <div class="card no-print">
             <div class="btns main-actions">
-                <button type="button" id="printPdfBtn">Natisni / Shrani cel vprašalnik v PDF</button>
-                <button type="button" id="printAndMailBtn">Shrani cel vprašalnik v PDF in pošlji</button>
-                <button type="button" id="saveDraftBtn">Shrani vprašalnik</button>
+                <button type="button" id="saveDraftBtn" class="primary-save">Shrani vprašalnik</button>
             </div>
 
-            <div class="muted preserve-wrap" style="margin-top:10px;">
-		POMOČ:
-                • Natisni / Shrani v PDF: pripravi PDF za tisk ali arhiv. Nekateri uporabniki boste izpolnili tudi tabelo mušter za konfiguracije, ki se 					  bodo prenesele v .csv formatu v prenose.
-                • Shrani PDF in pošlji: odpre email odjemalec in nato tisk v PDF. PDF in mušter za konfiguracije (.csv datoteka) morate pripeti ROČNO.
-                • Shrani vprašalnik: Shrani .html verzijo vprašalnika z odgovori. Načeloma se shranijo tudi odgovori v izvorni datoteki.
+            <div class="muted preserve-wrap save-help">
+                POMOČ:
+                • Kliknite »Shrani vprašalnik«, da se shrani celoten vprašalnik z vsemi odgovori.
+                • Če brskalnik omogoča neposredno shranjevanje, se bo po prvi izbiri datoteke ob naslednjem kliku posodobila ista datoteka.
+                • Brskalnik si bo poskušal zapomniti povezavo do te datoteke tudi za naslednje odpiranje vprašalnika. Če tega ne dovoli, izberite isto datoteko, ko vas vpraša za shranjevanje.
+                • Če brskalnik neposrednega shranjevanja ne omogoča, se bo v Prenose shranila nova HTML datoteka. Za nadaljevanje vedno odprite zadnjo shranjeno HTML datoteko.
+                • Samodejna kopija v brskalniku je samo dodatna varnostna kopija in lahko izgine, če se pobrišejo podatki brskalnika.
             </div>
             <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
-            <div id="draftStatus" class="muted" style="margin-top:6px;">Osnutek je samodejno shranjen v tem brskalniku.</div>
-            <div id="fileSaveStatus" class="muted" style="margin-top:4px;"></div>
+            <div id="draftStatus" class="muted save-status">Samodejna varnostna kopija v tem brskalniku še ni osvežena.</div>
+            <div id="fileSaveStatus" class="muted save-status">Vprašalnik še ni ročno shranjen v HTML datoteko.</div>
         </div>
     </div>
 
@@ -3406,8 +3453,10 @@ PO;TO;SR;ČE;PE;SO;NE
     <script>
         const CONFIG = ${json};
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
-        const DRAFT_SAVE_HANDLES = new Map();
-        let DRAFT_DIRECTORY_HANDLE = null;
+        const DRAFT_HANDLE_DB_NAME = "VprasalnikFileHandles";
+        const DRAFT_HANDLE_STORE_NAME = "handles";
+        let DRAFT_FILE_HANDLE = null;
+        let DRAFT_FILE_HANDLE_NAME = "";
         let PRINT_DIRECTORY_HANDLE = null;
         const MATRIX_CSV_ATTACHMENTS = new Map();
         const MATRIX_EDITOR_STATE = new Map();
@@ -3540,12 +3589,130 @@ PO;TO;SR;ČE;PE;SO;NE
             return null;
         }
 
+        function formatStatusDateTime(date = new Date()) {
+            return date.toLocaleString("sl-SI", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        function setStatusMessage(elementId, message, type = "") {
+            const status = document.getElementById(elementId);
+            if (!status) return;
+            status.textContent = message;
+            status.classList.remove("success", "warning", "error");
+            if (type) status.classList.add(type);
+        }
+
+        function getDraftHandleStorageKey() {
+            const person = getSelectedPersonName() || "brez-osebe";
+            const unit = getSelectedUnitValue() || "brez-enote";
+            return getDraftStorageKey() + "::" + simpleHash(person + "::" + unit) + "::html-file-handle";
+        }
+
+        function openDraftHandleDb() {
+            if (!window.indexedDB) return Promise.resolve(null);
+            return new Promise((resolve) => {
+                const request = indexedDB.open(DRAFT_HANDLE_DB_NAME, 1);
+                request.onupgradeneeded = () => {
+                    const db = request.result;
+                    if (!db.objectStoreNames.contains(DRAFT_HANDLE_STORE_NAME)) {
+                        db.createObjectStore(DRAFT_HANDLE_STORE_NAME);
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => resolve(null);
+                request.onblocked = () => resolve(null);
+            });
+        }
+
+        async function readStoredDraftFileHandle() {
+            const db = await openDraftHandleDb();
+            if (!db) return null;
+            return new Promise((resolve) => {
+                const transaction = db.transaction(DRAFT_HANDLE_STORE_NAME, "readonly");
+                const store = transaction.objectStore(DRAFT_HANDLE_STORE_NAME);
+                const request = store.get(getDraftHandleStorageKey());
+                request.onsuccess = () => resolve(request.result || null);
+                request.onerror = () => resolve(null);
+                transaction.oncomplete = () => db.close();
+                transaction.onerror = () => {
+                    db.close();
+                    resolve(null);
+                };
+            });
+        }
+
+        async function storeDraftFileHandle(fileHandle) {
+            if (!fileHandle || !window.indexedDB) return;
+            try {
+                const db = await openDraftHandleDb();
+                if (!db) return;
+                await new Promise((resolve) => {
+                    const transaction = db.transaction(DRAFT_HANDLE_STORE_NAME, "readwrite");
+                    const store = transaction.objectStore(DRAFT_HANDLE_STORE_NAME);
+                    store.put({
+                        fileHandle,
+                        fileName: fileHandle.name || getDraftFileName(false),
+                        savedAt: new Date().toISOString()
+                    }, getDraftHandleStorageKey());
+                    transaction.oncomplete = () => {
+                        db.close();
+                        resolve();
+                    };
+                    transaction.onerror = () => {
+                        db.close();
+                        resolve();
+                    };
+                });
+            } catch {
+                // Nekateri brskalniki FileSystemFileHandle ne dovolijo shraniti v IndexedDB.
+            }
+        }
+
+        async function forgetStoredDraftFileHandle() {
+            try {
+                const db = await openDraftHandleDb();
+                if (!db) return;
+                await new Promise((resolve) => {
+                    const transaction = db.transaction(DRAFT_HANDLE_STORE_NAME, "readwrite");
+                    transaction.objectStore(DRAFT_HANDLE_STORE_NAME).delete(getDraftHandleStorageKey());
+                    transaction.oncomplete = () => {
+                        db.close();
+                        resolve();
+                    };
+                    transaction.onerror = () => {
+                        db.close();
+                        resolve();
+                    };
+                });
+            } catch {}
+        }
+
+        async function restoreDraftFileHandle(showMissingMessage = false) {
+            if (!window.showSaveFilePicker || !window.indexedDB) return;
+            const stored = await readStoredDraftFileHandle();
+            if (!stored?.fileHandle) {
+                if (showMissingMessage) {
+                    setStatusMessage("fileSaveStatus", "Za izbrano osebo/enoto brskalnik še nima zapomnjene HTML datoteke. Ob naslednjem shranjevanju izberite pravo datoteko, nato jo bo poskušal posodabljati.", "warning");
+                }
+                return;
+            }
+            DRAFT_FILE_HANDLE = stored.fileHandle;
+            DRAFT_FILE_HANDLE_NAME = stored.fileName || stored.fileHandle.name || getDraftFileName(false);
+            setStatusMessage("fileSaveStatus", "Brskalnik ima zapomnjeno povezavo do datoteke »" + DRAFT_FILE_HANDLE_NAME + "«. Ob kliku »Shrani vprašalnik« jo bo poskušal posodobiti.", "success");
+        }
+
         function saveDraftBackup() {
             try {
                 localStorage.setItem(getDraftStorageKey(), JSON.stringify(collectDraft()));
-            } catch {}
-            const status = document.getElementById("draftStatus");
-            if (status) status.textContent = "Osnutek je samodejno shranjen v tem brskalniku.";
+                setStatusMessage("draftStatus", "Samodejna varnostna kopija v tem brskalniku: " + formatStatusDateTime() + ".", "success");
+            } catch {
+                setStatusMessage("draftStatus", "Samodejne varnostne kopije v brskalniku ni bilo mogoče shraniti. Uporabite gumb »Shrani vprašalnik«.", "warning");
+            }
         }
 
         function requirePersonName() {
@@ -3844,19 +4011,115 @@ PO;TO;SR;ČE;PE;SO;NE
             return html;
         }
 
-        async function saveDraftToFile() {
-            const draft = collectDraft(null);
+        function getDraftFileName(includeTimestamp = false) {
             const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
-            const fileName = (String(base || "Vprašalnik")
+            const safeBase = (String(base || "Vprašalnik")
                 .replace(/[\\/:*?"<>|]+/g, "-")
                 .replace(/\s+/g, " ")
-                .trim() || "Vprašalnik") + ".html";
-            const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
+                .trim() || "Vprašalnik");
 
-            downloadBlob(new Blob([htmlWithDraft], { type: "text/html;charset=utf-8" }), fileName);
-            saveDraftBackup();
-            const status = document.getElementById("fileSaveStatus");
-            if (status) status.textContent = "Vprašalnik je shranjen kot nova HTML datoteka.";
+            if (!includeTimestamp) return safeBase + ".html";
+
+            const now = new Date();
+            const stamp = [
+                now.getFullYear(),
+                String(now.getMonth() + 1).padStart(2, "0"),
+                String(now.getDate()).padStart(2, "0"),
+                String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0")
+            ].join("-");
+            return safeBase + " - " + stamp + ".html";
+        }
+
+        async function ensureWritableFileHandle(fileHandle) {
+            if (!fileHandle) return false;
+            if (!fileHandle.queryPermission || !fileHandle.requestPermission) return true;
+            const options = { mode: "readwrite" };
+            if (await fileHandle.queryPermission(options) === "granted") return true;
+            return await fileHandle.requestPermission(options) === "granted";
+        }
+
+        async function writeHtmlDraftToHandle(fileHandle, htmlContent) {
+            const hasPermission = await ensureWritableFileHandle(fileHandle);
+            if (!hasPermission) {
+                throw new Error("Brskalnik ni dovolil pisanja v izbrano datoteko.");
+            }
+
+            const writable = await fileHandle.createWritable();
+            await writable.write(htmlContent);
+            await writable.close();
+            DRAFT_FILE_HANDLE = fileHandle;
+            DRAFT_FILE_HANDLE_NAME = fileHandle.name || getDraftFileName(false);
+            await storeDraftFileHandle(fileHandle);
+            return { mode: "saved", fileName: DRAFT_FILE_HANDLE_NAME };
+        }
+
+        async function saveHtmlDraftFile(htmlContent) {
+            if (window.showSaveFilePicker) {
+                if (DRAFT_FILE_HANDLE) {
+                    try {
+                        return await writeHtmlDraftToHandle(DRAFT_FILE_HANDLE, htmlContent);
+                    } catch (err) {
+                        console.warn("Shranjevanje v zapomnjeno datoteko ni uspelo, uporabnik bo izbral datoteko znova.", err);
+                        DRAFT_FILE_HANDLE = null;
+                        DRAFT_FILE_HANDLE_NAME = "";
+                        await forgetStoredDraftFileHandle();
+                        if (err?.name === "AbortError") throw err;
+                    }
+                }
+
+                const pickerOptions = {
+                    suggestedName: getDraftFileName(false),
+                    types: [{
+                        description: "HTML vprašalnik z odgovori",
+                        accept: {
+                            "text/html": [".html"]
+                        }
+                    }]
+                };
+
+                const fileHandle = await window.showSaveFilePicker(pickerOptions);
+                return await writeHtmlDraftToHandle(fileHandle, htmlContent);
+            }
+
+            const fileName = getDraftFileName(true);
+            downloadBlob(new Blob([htmlContent], { type: "text/html;charset=utf-8" }), fileName);
+            return { mode: "downloaded", fileName };
+        }
+
+        async function saveDraftToFile() {
+            const saveButton = document.getElementById("saveDraftBtn");
+            try {
+                const draft = collectDraft(null);
+                setStatusMessage("fileSaveStatus", "Ta HTML datoteka vsebuje odgovore, pripravljene za shranjevanje ob " + formatStatusDateTime(new Date(draft.savedAt)) + ".", "success");
+                const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
+
+                if (saveButton) {
+                    saveButton.disabled = true;
+                    saveButton.textContent = "Shranjujem ...";
+                }
+                setStatusMessage("fileSaveStatus", "Shranjujem vprašalnik ...", "");
+
+                const result = await saveHtmlDraftFile(htmlWithDraft);
+                saveDraftBackup();
+
+                if (result.mode === "saved") {
+                    setStatusMessage("fileSaveStatus", "Vprašalnik je shranjen v datoteko »" + result.fileName + "« ob " + formatStatusDateTime() + ". Naslednji klik bo v tem odprtem oknu posodobil isto datoteko.", "success");
+                } else {
+                    setStatusMessage("fileSaveStatus", "Vprašalnik je shranjen kot nova HTML datoteka »" + result.fileName + "« v Prenose ob " + formatStatusDateTime() + ". Za nadaljevanje odprite zadnjo shranjeno datoteko.", "warning");
+                }
+            } catch (err) {
+                if (err?.name === "AbortError") {
+                    setStatusMessage("fileSaveStatus", "Shranjevanje je bilo preklicano. Odgovori ostanejo v odprtem vprašalniku, vendar datoteka ni bila posodobljena.", "warning");
+                    return;
+                }
+                console.error("Shranjevanje vprašalnika ni uspelo:", err);
+                setStatusMessage("fileSaveStatus", "Shranjevanje ni uspelo. Poskusite še enkrat ali uporabite drug brskalnik.", "error");
+            } finally {
+                if (saveButton) {
+                    saveButton.disabled = false;
+                    saveButton.textContent = "Shrani vprašalnik";
+                }
+            }
         }
 
         function clearDraftBackup() {
@@ -4353,7 +4616,6 @@ PO;TO;SR;ČE;PE;SO;NE
             card.innerHTML =
                 '<div class="btns">' +
                     '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
-                    '<button type="button" data-section-action="mail" data-section="' + sectionIndex + '">Shrani PDF in pošlji</button>' +
                 '</div>';
             return card;
         }
@@ -4811,9 +5073,12 @@ PO;TO;SR;ČE;PE;SO;NE
             refreshAutoResizeForAllTextareas();
         }
         document.getElementById("personName").addEventListener("change", () => {
+            DRAFT_FILE_HANDLE = null;
+            DRAFT_FILE_HANDLE_NAME = "";
             updateDocumentTitleForPdf();
             renderSurvey();
             saveDraftBackup();
+            restoreDraftFileHandle(true);
         });
 
         document.addEventListener("input", (event) => {
@@ -4834,14 +5099,18 @@ PO;TO;SR;ČE;PE;SO;NE
             refreshAutoResizeForAllTextareas();
         });
 
-        document.getElementById("printPdfBtn").addEventListener("click", async () => {
-            if (!requirePersonName()) return;
-            updateDocumentTitleForPdf();
-            const csvArtifacts = downloadMatrixCsvAttachments();
-            notifyCsvDownload(csvArtifacts);
-            withPreparedPrint(() => window.print());
-        });
-        document.getElementById("printAndMailBtn").addEventListener("click", printAndMail);
+        const printPdfBtn = document.getElementById("printPdfBtn");
+        if (printPdfBtn) {
+            printPdfBtn.addEventListener("click", async () => {
+                if (!requirePersonName()) return;
+                updateDocumentTitleForPdf();
+                const csvArtifacts = downloadMatrixCsvAttachments();
+                notifyCsvDownload(csvArtifacts);
+                withPreparedPrint(() => window.print());
+            });
+        }
+        const printAndMailBtn = document.getElementById("printAndMailBtn");
+        if (printAndMailBtn) printAndMailBtn.addEventListener("click", printAndMail);
         document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
 
@@ -4883,6 +5152,8 @@ PO;TO;SR;ČE;PE;SO;NE
             const backup = loadDraftBackup();
             if (backup) applyDraft(backup);
         }
+
+        restoreDraftFileHandle();
     ${"</scr" + "ipt>"}
 </body>
 </html>`;
