@@ -3251,7 +3251,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
         .main-actions {
             display: grid;
-            grid-template-columns: repeat(2, minmax(180px, 1fr));
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
             gap: 10px;
         }
 
@@ -3293,8 +3293,24 @@ PO;TO;SR;ČE;PE;SO;NE
             background: #166534;
         }
 
-        .main-actions button:disabled,
-        .final-actions button:disabled {
+        .pdf-save {
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .pdf-save:hover {
+            background: #166534;
+            border-color: #166534;
+        }
+
+        .main-actions .pdf-save {
+            font-size: 16px;
+            padding: 14px 18px;
+        }
+
+        .main-actions .primary-save:disabled {
             cursor: wait;
             opacity: 0.72;
         }
@@ -3502,6 +3518,7 @@ PO;TO;SR;ČE;PE;SO;NE
             <div class="action-heading">Delo z odgovori</div>
             <div class="btns main-actions">
                 <button type="button" id="saveDraftBtn" class="primary-save">Shrani bazo odgovorov</button>
+                <button type="button" id="printPdfBtn" class="pdf-save">Shrani cel vprašalnik v PDF</button>
             </div>
 
             <div class="muted preserve-wrap save-help">
@@ -3965,22 +3982,22 @@ PO;TO;SR;ČE;PE;SO;NE
         }
 
         function getAnswersFileName(includeTimestamp = true) {
-            const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
-            const safeBase = (String(base || "Vprašalnik")
-                .replace(/[\\\\/:*?"<>|]+/g, "-")
-                .replace(/\\s+/g, " ")
-                .trim() || "Vprašalnik");
+            const parts = [
+                "Odgovori",
+                getSelectedUnitValue(),
+                getSelectedPersonName()
+            ].map(part => sanitizeFilePart(part)).filter(Boolean);
+            const baseName = parts.join(" - ") || "Odgovori";
 
-            if (!includeTimestamp) return safeBase + " - baza odgovorov.json";
+            if (!includeTimestamp) return baseName + ".json";
 
             const now = new Date();
-            const stamp = [
-                now.getFullYear(),
-                String(now.getMonth() + 1).padStart(2, "0"),
-                String(now.getDate()).padStart(2, "0"),
-                String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0")
-            ].join("-");
-            return safeBase + " - baza odgovorov - " + stamp + ".json";
+            const stamp = String(now.getFullYear()).slice(2) +
+                String(now.getMonth() + 1).padStart(2, "0") +
+                String(now.getDate()).padStart(2, "0") + "-" +
+                String(now.getHours()).padStart(2, "0") +
+                String(now.getMinutes()).padStart(2, "0");
+            return baseName + " - " + stamp + ".json";
         }
 
         function buildAnswersExportPayload() {
@@ -4071,18 +4088,6 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
                 console.error("Uvoz baze odgovorov ni uspel:", err);
                 setStatusMessage("fileSaveStatus", err?.message || "Uvoz baze odgovorov ni uspel.", "error");
-            }
-        }
-
-        function validateAnswersDraft(draft) {
-            if (!draft || typeof draft !== "object") {
-                return { ok: false, message: "Izbrana datoteka ni veljavna datoteka z odgovori." };
-            }
-            if (!Array.isArray(draft.answers)) {
-                return { ok: false, message: "Izbrana datoteka ne vsebuje odgovorov za vprašalnik." };
-            }
-            if (draft.surveyPeriod && draft.surveyPeriod !== (RUNTIME_CONFIG.surveyPeriod || "")) {
-                return { ok: false, message: "Datoteka z odgovori je bila shranjena za drugo obdobje. Preverite, ali ste izbrali pravo datoteko." };
             }
             if (draft.surveyId && draft.surveyId !== getSurveyId()) {
                 return { ok: true, warning: "Odgovori so uvoženi, vendar je bila datoteka morda ustvarjena za nekoliko drugo verzijo vprašalnika. Preverite uvožene odgovore." };
@@ -4621,7 +4626,7 @@ PO;TO;SR;ČE;PE;SO;NE
             card.className = "section-actions-card no-print";
             card.innerHTML =
                 '<div class="btns">' +
-                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Shrani v PDF ' + sectionIndex + '. del</button>' +
+                    '<button type="button" class="pdf-save" data-section-action="print" data-section="' + sectionIndex + '">Izvozi ' + sectionIndex + '. del v PDF</button>' +
                 '</div>';
             return card;
         }
