@@ -2984,6 +2984,39 @@ PO;TO;SR;ČE;PE;SO;NE
             display: none;
         }
 
+        .top-answer-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .top-answer-actions button {
+            width: auto;
+        }
+
+        .btn-secondary-soft {
+            background: #eef2ff;
+            border-color: #c7d2fe;
+            color: #1d4ed8;
+            font-weight: 700;
+        }
+
+        .btn-danger-subtle {
+            padding: 7px 10px;
+            color: #991b1b;
+            background: #fff;
+            border-color: #fecaca;
+            font-size: 12px;
+            opacity: 0.78;
+        }
+
+        .btn-danger-subtle:hover {
+            opacity: 1;
+            background: #fef2f2;
+        }
+
         .question-image {
             margin: 10px 0 6px;
             max-width: 100%;
@@ -3455,7 +3488,11 @@ PO;TO;SR;ČE;PE;SO;NE
                     <input id="surveyUnit" type="hidden" />
                 </div>
             </div>
-                <button type="button" id="resetAnswersBtn">Počisti odgovore</button>
+            <div class="top-answer-actions no-print">
+                <button type="button" id="importAnswersBtn" class="btn-secondary-soft">Uvozi odgovore</button>
+                <button type="button" id="resetAnswersBtn" class="btn-danger-subtle">Počisti odgovore</button>
+                <input id="importAnswersInput" type="file" accept=".json,application/json" class="hidden" />
+            </div>
         </div>
 
         <div id="surveyContainer"></div>
@@ -3464,26 +3501,17 @@ PO;TO;SR;ČE;PE;SO;NE
         <div class="card no-print">
             <div class="action-heading">Delo z odgovori</div>
             <div class="btns main-actions">
-                <button type="button" id="saveAnswersBtn" class="secondary-action">Shrani odgovore</button>
-                <button type="button" id="importAnswersBtn" class="secondary-action">Uvozi odgovore</button>
-                <input id="importAnswersInput" type="file" accept=".json,application/json" class="hidden" />
+                <button type="button" id="saveDraftBtn" class="primary-save">Shrani bazo odgovorov</button>
             </div>
 
             <div class="muted preserve-wrap save-help">
-                Če vprašalnika ne boste izpolnili do konca, kliknite »Shrani odgovore«.
-                Ko želite nadaljevati, odprite vprašalnik, kliknite »Uvozi odgovore« in izberite zadnjo shranjeno datoteko z odgovori.
-                Samodejna kopija v brskalniku je samo dodatna varnostna kopija in lahko izgine, če se pobrišejo podatki brskalnika.
+                POMOČ:
+                • Kliknite »Shrani bazo odgovorov«, da shranite svoje vnose v ločeno datoteko z odgovori.
+                • Za nadaljevanje dela ponovno odprite ta isti vprašalnik in pri vrhu kliknite »Uvozi odgovore«.
+                • Priporočilo: bazo odgovorov shranite tudi pred zapiranjem vprašalnika ali brskalnika.
             </div>
-            <div id="answersStatus" class="muted save-status">Odgovori še niso ročno shranjeni v datoteko.</div>
-            <div id="draftStatus" class="muted save-status">Samodejna varnostna kopija v tem brskalniku še ni osvežena.</div>
-
-            <div class="final-output-box">
-                <div class="action-heading">Zaključeni vprašalnik</div>
-                <div class="final-actions">
-                    <button type="button" id="printPdfBtn" class="final-pdf">Shrani zaključen vprašalnik v PDF</button>
-                </div>
-                <div class="muted preserve-wrap save-help">Ko je vprašalnik dokončan, ga shranite v PDF in ta PDF pošljite planerju.</div>
-            </div>
+            <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
+            <div id="fileSaveStatus" class="muted save-status">Baza odgovorov še ni izvožena.</div>
         </div>
     </div>
 
@@ -3493,6 +3521,8 @@ PO;TO;SR;ČE;PE;SO;NE
         const CONFIG = ${json};
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
         let PRINT_DIRECTORY_HANDLE = null;
+        let HAS_UNEXPORTED_CHANGES = false;
+        let IS_APPLYING_DRAFT = false;
         const MATRIX_CSV_ATTACHMENTS = new Map();
         const MATRIX_EDITOR_STATE = new Map();
 
@@ -3645,9 +3675,8 @@ PO;TO;SR;ČE;PE;SO;NE
         function saveDraftBackup() {
             try {
                 localStorage.setItem(getDraftStorageKey(), JSON.stringify(collectDraft()));
-                setStatusMessage("draftStatus", "Samodejna varnostna kopija v tem brskalniku: " + formatStatusDateTime() + ".", "success");
             } catch {
-                setStatusMessage("draftStatus", "Samodejne varnostne kopije v brskalniku ni bilo mogoče shraniti. Uporabite gumb »Shrani odgovore«.", "warning");
+                // Tiha lokalna kopija je samo interna zaščita; uporabniku kot glavni način shranjevanja ostane izvoz baze odgovorov.
             }
         }
 
@@ -3935,23 +3964,15 @@ PO;TO;SR;ČE;PE;SO;NE
             };
         }
 
-        function injectDraftIntoCurrentHtml(draft) {
-            const html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
-            const safeJson = JSON.stringify(draft)
-                .replace(/</g, "\\u003c")
-                .replace(/>/g, "\\u003e")
-                .replace(/&/g, "\\u0026");
-            const pattern = /(<template id="savedDraftData">)([\\s\\S]*?)(<\\/template>)/;
-            if (pattern.test(html)) {
-                return html.replace(pattern, "$1" + safeJson + "$3");
-            }
-            return html;
-        }
+        function getAnswersFileName(includeTimestamp = true) {
+            const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
+            const safeBase = (String(base || "Vprašalnik")
+                .replace(/[\\/:*?"<>|]+/g, "-")
+                .replace(/\s+/g, " ")
+                .trim() || "Vprašalnik");
 
-        function getAnswersFileName() {
-            const period = sanitizeFilePart(RUNTIME_CONFIG.surveyPeriod || "brez-obdobja");
-            const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "brez-enote");
-            const person = sanitizeFilePart(document.getElementById("personName")?.value || "brez-osebe");
+            if (!includeTimestamp) return safeBase + " - baza odgovorov.json";
+
             const now = new Date();
             const stamp = [
                 now.getFullYear(),
@@ -3959,40 +3980,97 @@ PO;TO;SR;ČE;PE;SO;NE
                 String(now.getDate()).padStart(2, "0"),
                 String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0")
             ].join("-");
-            return "Odgovori - " + period + " - " + unit + " - " + person + " - " + stamp + ".json";
+            return safeBase + " - baza odgovorov - " + stamp + ".json";
         }
 
-        function prepareAnswersDraft() {
+        function buildAnswersExportPayload() {
             const draft = collectDraft(null);
             return {
                 ...draft,
-                fileType: "vprasalnik_answers",
+                exportType: "vprasalnik_answers",
+                exportLabel: "Baza odgovorov",
                 exportedAt: new Date().toISOString()
             };
         }
 
-        async function saveAnswersToFile() {
-            const saveButton = document.getElementById("saveAnswersBtn");
+        function markAnswersChanged() {
+            if (IS_APPLYING_DRAFT) return;
+            HAS_UNEXPORTED_CHANGES = true;
+            setStatusMessage("fileSaveStatus", "Odgovori so spremenjeni. Pred zapiranjem priporočamo izvoz baze odgovorov.", "warning");
+        }
+
+        async function exportAnswersToFile() {
+            const saveButton = document.getElementById("saveDraftBtn");
             try {
+                const payload = buildAnswersExportPayload();
+                const safeJson = JSON.stringify(payload, null, 2);
+
                 if (saveButton) {
                     saveButton.disabled = true;
                     saveButton.textContent = "Shranjujem ...";
                 }
+                setStatusMessage("fileSaveStatus", "Pripravljam bazo odgovorov za shranjevanje ...", "");
 
-                const draft = prepareAnswersDraft();
-                const fileName = getAnswersFileName();
-                const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json;charset=utf-8" });
-                downloadBlob(blob, fileName);
+                downloadBlob(new Blob([safeJson], { type: "application/json;charset=utf-8" }), getAnswersFileName(true));
                 saveDraftBackup();
-                setStatusMessage("answersStatus", "Odgovori so shranjeni v datoteko »" + fileName + "«. Za nadaljevanje kasneje uporabite »Uvozi odgovore« in izberite zadnjo shranjeno datoteko.", "success");
+                HAS_UNEXPORTED_CHANGES = false;
+                setStatusMessage("fileSaveStatus", "Baza odgovorov je bila izvožena ob " + formatStatusDateTime() + ". To datoteko lahko kasneje uvozite v isti vprašalnik.", "success");
             } catch (err) {
-                console.error("Shranjevanje odgovorov ni uspelo:", err);
-                setStatusMessage("answersStatus", "Shranjevanje odgovorov ni uspelo. Poskusite še enkrat.", "error");
+                console.error("Izvoz baze odgovorov ni uspel:", err);
+                setStatusMessage("fileSaveStatus", "Izvoz baze odgovorov ni uspel. Poskusite še enkrat.", "error");
             } finally {
                 if (saveButton) {
                     saveButton.disabled = false;
-                    saveButton.textContent = "Shrani odgovore";
+                    saveButton.textContent = "Shrani bazo odgovorov";
                 }
+            }
+        }
+
+        function validateImportedAnswers(draft) {
+            if (!draft || typeof draft !== "object") {
+                throw new Error("Datoteka ni veljavna baza odgovorov.");
+            }
+            if (!Array.isArray(draft.answers)) {
+                throw new Error("Datoteka ne vsebuje odgovorov.");
+            }
+
+            const importedSurveyId = String(draft.surveyId || "");
+            const currentSurveyId = String(getSurveyId() || "");
+            const importedPeriod = String(draft.surveyPeriod || "");
+            const currentPeriod = String(RUNTIME_CONFIG.surveyPeriod || "");
+            const isDifferentSurvey = importedSurveyId && currentSurveyId && importedSurveyId !== currentSurveyId;
+            const isDifferentPeriod = importedPeriod && currentPeriod && importedPeriod !== currentPeriod;
+
+            if (isDifferentSurvey || isDifferentPeriod) {
+                const proceed = confirm(
+                    "Ta baza odgovorov je bila morda ustvarjena za drug vprašalnik ali drugo obdobje.\n\n" +
+                    "Uvoz lahko preskoči odgovore, ki se ne ujemajo s trenutnim vprašalnikom.\n\n" +
+                    "Ali vseeno želite nadaljevati?"
+                );
+                if (!proceed) {
+                    const error = new Error("Uvoz je bil preklican.");
+                    error.name = "AbortError";
+                    throw error;
+                }
+            }
+        }
+
+        async function importAnswersFile(file) {
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const draft = JSON.parse(text);
+                validateImportedAnswers(draft);
+                applyDraft(draft);
+                HAS_UNEXPORTED_CHANGES = false;
+                setStatusMessage("fileSaveStatus", "Baza odgovorov »" + file.name + "« je bila uvožena ob " + formatStatusDateTime() + ".", "success");
+            } catch (err) {
+                if (err?.name === "AbortError") {
+                    setStatusMessage("fileSaveStatus", "Uvoz baze odgovorov je bil preklican.", "warning");
+                    return;
+                }
+                console.error("Uvoz baze odgovorov ni uspel:", err);
+                setStatusMessage("fileSaveStatus", err?.message || "Uvoz baze odgovorov ni uspel.", "error");
             }
         }
 
@@ -4061,31 +4139,27 @@ PO;TO;SR;ČE;PE;SO;NE
             updateDocumentTitleForPdf();
             setStatusMessage("answersStatus", "Odgovori so počiščeni. Za nadaljevanje iz shranjene datoteke uporabite »Uvozi odgovore«.", "warning");
 
+            HAS_UNEXPORTED_CHANGES = false;
+            setStatusMessage("fileSaveStatus", "Odgovori so bili pobrisani. Bazo odgovorov izvozite, ko boste dodali nove odgovore.", "warning");
             alert("Vsi odgovori in lokalno shranjen osnutek so bili pobrisani.");
         }
 
         function applyDraft(draft, sectionIndex = null) {
             if (!draft || typeof draft !== "object") {
-                alert("Osnutek ni veljaven.");
+                alert("Baza odgovorov ni veljavna.");
                 return;
             }
 
-            document.getElementById("personName").value = draft.personName || "";
-            document.getElementById("surveyDate").value = draft.surveyDate || "";
-            renderSurvey();
+            IS_APPLYING_DRAFT = true;
+            try {
+                document.getElementById("personName").value = draft.personName || "";
+                document.getElementById("surveyDate").value = draft.surveyDate || "";
+                renderSurvey();
 
-            const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
+                const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
 
-            const visibleQuestions = getVisibleQuestionConfigs();
-
-            (draft.answers || []).forEach((answer) => {
-                let questionIndex = Number(answer.questionIndex);
-                if (answer.questionId) {
-                    const idIndex = visibleQuestions.findIndex(question => question?.id === answer.questionId);
-                    if (idIndex >= 0) questionIndex = idIndex;
-                }
-
-                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(questionIndex));
+                (draft.answers || []).forEach((answer) => {
+                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(answer.questionIndex));
                 if (!card) return;
                 const q = visibleQuestions[questionIndex];
                 if (!q || !card) return;
@@ -4155,7 +4229,10 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
             });
 
-            saveDraftBackup();
+                saveDraftBackup();
+            } finally {
+                IS_APPLYING_DRAFT = false;
+            }
         }
 
         function getPdfFileName() {
@@ -4456,6 +4533,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+                markAnswersChanged();
                 saveDraftBackup();
             };
 
@@ -4543,7 +4621,7 @@ PO;TO;SR;ČE;PE;SO;NE
             card.className = "section-actions-card no-print";
             card.innerHTML =
                 '<div class="btns">' +
-                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
+                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Shrani v PDF ' + sectionIndex + '. del</button>' +
                 '</div>';
             return card;
         }
@@ -5003,16 +5081,33 @@ PO;TO;SR;ČE;PE;SO;NE
         document.getElementById("personName").addEventListener("change", () => {
             updateDocumentTitleForPdf();
             renderSurvey();
+            markAnswersChanged();
             saveDraftBackup();
         });
 
         document.addEventListener("input", (event) => {
             if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            markAnswersChanged();
+            saveDraftBackup();
+        });
+
+        document.addEventListener("change", (event) => {
+            if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            markAnswersChanged();
             saveDraftBackup();
         });
 
         window.addEventListener("pagehide", () => {
             saveDraftBackup();
+        });
+
+        window.addEventListener("beforeunload", (event) => {
+            saveDraftBackup();
+            if (!HAS_UNEXPORTED_CHANGES) return;
+            const message = "Ali želite zapreti vprašalnik? Če ga še niste zaključili, najprej shranite bazo odgovorov, sicer se lahko podatki izgubijo.";
+            event.preventDefault();
+            event.returnValue = message;
+            return message;
         });
 
         window.addEventListener("beforeprint", () => {
@@ -5036,13 +5131,13 @@ PO;TO;SR;ČE;PE;SO;NE
         }
         const printAndMailBtn = document.getElementById("printAndMailBtn");
         if (printAndMailBtn) printAndMailBtn.addEventListener("click", printAndMail);
-        document.getElementById("saveAnswersBtn").addEventListener("click", saveAnswersToFile);
+        document.getElementById("saveDraftBtn").addEventListener("click", exportAnswersToFile);
         document.getElementById("importAnswersBtn").addEventListener("click", () => {
             document.getElementById("importAnswersInput").click();
         });
         document.getElementById("importAnswersInput").addEventListener("change", (event) => {
             const file = event.target.files?.[0];
-            if (file) importAnswersFromFile(file);
+            if (file) importAnswersFile(file);
             event.target.value = "";
         });
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
