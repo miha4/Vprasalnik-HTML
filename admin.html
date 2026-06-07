@@ -3327,6 +3327,23 @@ PO;TO;SR;ČE;PE;SO;NE
             padding: 14px 18px;
         }
 
+        .pdf-save {
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .pdf-save:hover {
+            background: #166534;
+            border-color: #166534;
+        }
+
+        .main-actions .pdf-save {
+            font-size: 16px;
+            padding: 14px 18px;
+        }
+
         .main-actions .primary-save:disabled {
             cursor: wait;
             opacity: 0.72;
@@ -3673,15 +3690,19 @@ PO;TO;SR;ČE;PE;SO;NE
         function getQuestionKey(question, fallbackIndex = 0) {
             const source = question && typeof question === "object" ? question : {};
             if (source.id) return String(source.id);
-            return "q_" + simpleHash(JSON.stringify({
-                index: Number(fallbackIndex) || 0,
+            const stableParts = {
                 sectionId: source.sectionId || "",
                 type: source.type || "",
                 text: source.text || "",
                 childText: source.child?.text || "",
                 matrixRows: source.matrix?.rows || "",
                 matrixCols: source.matrix?.cols || ""
-            }));
+            };
+            const stableSource = JSON.stringify(stableParts);
+            if (stableSource.replace(/[{}":,]/g, "").trim()) {
+                return "q_" + simpleHash(stableSource);
+            }
+            return "q_index_" + (Number(fallbackIndex) || 0);
         }
 
         function normalizeYesNoChoice(value) {
@@ -3861,8 +3882,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 .slice(0, 80) || "matrika";
         }
 
-        function downloadMatrixCsvAttachments() {
-            const csvArtifacts = getCurrentMatrixCsvArtifacts();
+        function downloadMatrixCsvAttachments(sectionIndex = null) {
+            const csvArtifacts = getCurrentMatrixCsvArtifacts(sectionIndex);
             csvArtifacts.forEach((artifact) => {
                 downloadBlob(new Blob([artifact.csv], { type: "text/csv;charset=utf-8" }), artifact.fileName);
                 MATRIX_CSV_ATTACHMENTS.set(Number(artifact.questionIndex), { csv: artifact.csv, fileName: artifact.fileName });
@@ -3919,9 +3940,10 @@ PO;TO;SR;ČE;PE;SO;NE
             return base + ".csv";
         }
 
-        function getCurrentMatrixCsvArtifacts() {
+        function getCurrentMatrixCsvArtifacts(sectionIndex = null) {
             const matrixCards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"))
-                .filter(card => card.dataset.questionType === "matrix_table");
+                .filter(card => card.dataset.questionType === "matrix_table")
+                .filter(card => sectionIndex == null || Number(card.dataset.section) === Number(sectionIndex));
             const total = matrixCards.length;
             return matrixCards.map((card, index) => {
                 const questionIndex = Number(card.dataset.questionIndex || index);
@@ -3992,10 +4014,14 @@ PO;TO;SR;ČE;PE;SO;NE
                 surveyDate: document.getElementById("surveyDate").value || "",
                 answers: cards.map((card) => {
                     const questionIndex = Number(card.dataset.questionIndex);
-                    const q = (getVisibleQuestionConfigs()[questionIndex]) || {};
+                    const matched = findVisibleQuestionByAnswer({
+                        questionKey: card.dataset.questionKey || "",
+                        questionIndex
+                    });
+                    const q = matched.question || getVisibleQuestionConfigs()[questionIndex] || {};
                     const answer = {
                         questionIndex,
-                        questionKey: getQuestionKey(q, questionIndex),
+                        questionKey: card.dataset.questionKey || getQuestionKey(q, questionIndex),
                         type: q.type || null
                     };
 
@@ -4142,9 +4168,6 @@ PO;TO;SR;ČE;PE;SO;NE
                 console.error("Uvoz baze odgovorov ni uspel:", err);
                 setStatusMessage("fileSaveStatus", err?.message || "Uvoz baze odgovorov ni uspel.", "error");
             }
-            if (draft.surveyId && draft.surveyId !== getSurveyId()) {
-                return { ok: true, warning: "Odgovori so uvoženi, vendar je bila datoteka morda ustvarjena za nekoliko drugo verzijo vprašalnika. Preverite uvožene odgovore." };
-            }
             return { ok: true, warning: "" };
         }
 
@@ -4202,6 +4225,34 @@ PO;TO;SR;ČE;PE;SO;NE
             alert("Vsi odgovori in lokalno shranjen osnutek so bili pobrisani.");
         }
 
+        function applyMatrixAnswersToState(draft) {
+            if (!draft || !Array.isArray(draft.answers)) return;
+            draft.answers.forEach((answer) => {
+                const match = findVisibleQuestionByAnswer(answer);
+                if (!match.question || !Array.isArray(answer.matrixRows)) return;
+                const card = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]")).find(c =>
+                    c.dataset.questionKey === match.key || Number(c.dataset.questionIndex) === Number(match.index)
+                );
+                const questionIndex = Number(card?.dataset.questionIndex ?? match.index);
+                if (!Number.isFinite(questionIndex) || questionIndex < 0) return;
+                const rows = Math.max(1, Number.parseInt(String(match.question.matrix?.rows || 0), 10) || 1);
+                const cols = Math.max(1, Number.parseInt(String(match.question.matrix?.cols || 0), 10) || 1);
+                const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(match.question, rows, cols));
+                const csv = answer.matrixCsv || matrixValuesToCsv(normalizedRows);
+                const fileName = answer.matrixCsv ? ("Matrika-" + (questionIndex + 1) + ".csv") : "";
+                MATRIX_EDITOR_STATE.set(questionIndex, {
+                    rows: normalizedRows,
+                    csv,
+                    fileName,
+                    saved: true
+                });
+                MATRIX_CSV_ATTACHMENTS.set(questionIndex, {
+                    csv,
+                    fileName: fileName || ("Matrika-" + (questionIndex + 1) + ".csv")
+                });
+            });
+        }
+
         function applyDraft(draft, sectionIndex = null) {
             if (!draft || typeof draft !== "object") {
                 alert("Baza odgovorov ni veljavna.");
@@ -4212,6 +4263,10 @@ PO;TO;SR;ČE;PE;SO;NE
             try {
                 document.getElementById("personName").value = draft.personName || "";
                 document.getElementById("surveyDate").value = draft.surveyDate || "";
+                document.getElementById("surveyUnit").value = draft.surveyUnit || draft.selectedUnit || "";
+                document.getElementById("surveyUnitDisplay").value = draft.surveyUnit || draft.selectedUnit || "";
+                renderSurvey();
+                applyMatrixAnswersToState(draft);
                 renderSurvey();
 
                 const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
@@ -4225,6 +4280,7 @@ PO;TO;SR;ČE;PE;SO;NE
                         Number(c.dataset.questionIndex) === Number(questionIndex)
                     );
                     if (!q || !card || questionIndex < 0) return;
+                    const cardQuestionIndex = Number(card.dataset.questionIndex || questionIndex);
 
                     if (q.type === "text_long") {
                         const textarea = card.querySelector(".answer-textarea");
@@ -4242,17 +4298,17 @@ PO;TO;SR;ČE;PE;SO;NE
                         const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                         const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
                         const fileName = answer.matrixCsv
-                            ? ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
+                            ? ("Matrika-" + (Number(cardQuestionIndex) + 1) + ".csv")
                             : "";
-                        MATRIX_EDITOR_STATE.set(Number(questionIndex), {
+                        MATRIX_EDITOR_STATE.set(Number(cardQuestionIndex), {
                             rows: normalizedRows,
                             csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
                             fileName,
                             saved: true
                         });
-                        MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), {
+                        MATRIX_CSV_ATTACHMENTS.set(Number(cardQuestionIndex), {
                             csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
-                            fileName: fileName || ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
+                            fileName: fileName || ("Matrika-" + (Number(cardQuestionIndex) + 1) + ".csv")
                         });
                     }
 
@@ -4629,8 +4685,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
-                downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName);
-                setStatusMessage("fileSaveStatus", "Mušter za konfiguracije »" + fileName + "« je bil shranjen. Odgovore lahko nadaljujete urejati v vprašalniku.", "success");
+                setStatusMessage("fileSaveStatus", "Mušter za konfiguracije je shranjen v vprašalniku. CSV se bo prenesel ob izvozu tega dela ali celotnega vprašalnika v PDF.", "success");
 
                 const answers = Array.isArray(draftSnapshot.answers) ? draftSnapshot.answers : [];
                 const questionKey = getQuestionKey(questionConfig, Number(questionIndex));
@@ -4795,6 +4850,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const unitHiddenInput = document.getElementById("surveyUnit");
             const unitDisplayInput = document.getElementById("surveyUnitDisplay");
             const previousPerson = personSelect.value;
+            const previousUnit = unitHiddenInput.value || unitDisplayInput.value || "";
             const people = Array.isArray(RUNTIME_CONFIG.personUnitMap) ? RUNTIME_CONFIG.personUnitMap : [];
 
             personSelect.innerHTML = '<option value="">-- izberi osebo --</option>';
@@ -4811,7 +4867,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
             const selectedPerson = personSelect.value || "";
             const selectedPersonEntry = people.find(entry => entry.name === selectedPerson);
-            const selectedUnit = selectedPersonEntry?.unit || "";
+            const selectedUnit = selectedPersonEntry?.unit || (IS_APPLYING_DRAFT ? previousUnit : "");
             unitHiddenInput.value = selectedUnit;
             unitDisplayInput.value = selectedUnit;
             const container = document.getElementById("surveyContainer");
@@ -5224,11 +5280,11 @@ PO;TO;SR;ČE;PE;SO;NE
             const action = btn.dataset.sectionAction;
 
             if (action === "print") {
-                const csvArtifacts = downloadMatrixCsvAttachments();
+                const csvArtifacts = downloadMatrixCsvAttachments(sectionIndex);
                 notifyCsvDownload(csvArtifacts);
                 printSection(sectionIndex);
             } else if (action === "mail") {
-                const csvArtifacts = downloadMatrixCsvAttachments();
+                const csvArtifacts = downloadMatrixCsvAttachments(sectionIndex);
                 notifyCsvDownload(csvArtifacts);
                 const mailOpened = openMailClient();
                 if (mailOpened) {
