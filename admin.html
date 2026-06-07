@@ -3310,6 +3310,23 @@ PO;TO;SR;ČE;PE;SO;NE
             padding: 14px 18px;
         }
 
+        .pdf-save {
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .pdf-save:hover {
+            background: #166534;
+            border-color: #166534;
+        }
+
+        .main-actions .pdf-save {
+            font-size: 16px;
+            padding: 14px 18px;
+        }
+
         .main-actions .primary-save:disabled {
             cursor: wait;
             opacity: 0.72;
@@ -3653,6 +3670,42 @@ PO;TO;SR;ČE;PE;SO;NE
             return "sid_" + simpleHash(base);
         }
 
+        function getQuestionKey(question, fallbackIndex = 0) {
+            const source = question && typeof question === "object" ? question : {};
+            if (source.id) return String(source.id);
+            return "q_" + simpleHash(JSON.stringify({
+                index: Number(fallbackIndex) || 0,
+                sectionId: source.sectionId || "",
+                type: source.type || "",
+                text: source.text || "",
+                childText: source.child?.text || "",
+                matrixRows: source.matrix?.rows || "",
+                matrixCols: source.matrix?.cols || ""
+            }));
+        }
+
+        function normalizeYesNoChoice(value) {
+            const normalized = String(value || "").trim().toUpperCase();
+            if (normalized === "DA" || normalized === "YES" || normalized === "TRUE") return "DA";
+            if (normalized === "NE" || normalized === "NO" || normalized === "FALSE") return "NE";
+            return normalized;
+        }
+
+        function findVisibleQuestionByAnswer(answer) {
+            const visibleQuestions = getVisibleQuestionConfigs();
+            const key = String(answer?.questionKey || "");
+            if (key) {
+                const keyIndex = visibleQuestions.findIndex((question, index) => getQuestionKey(question, index) === key);
+                if (keyIndex >= 0) return { question: visibleQuestions[keyIndex], index: keyIndex, key };
+            }
+            const fallbackIndex = Number(answer?.questionIndex);
+            if (Number.isInteger(fallbackIndex) && fallbackIndex >= 0 && fallbackIndex < visibleQuestions.length) {
+                const question = visibleQuestions[fallbackIndex];
+                return { question, index: fallbackIndex, key: getQuestionKey(question, fallbackIndex) };
+            }
+            return { question: null, index: -1, key };
+        }
+
         function getDraftStorageKey() {
             const period = (RUNTIME_CONFIG.surveyPeriod || "brez-obdobja").trim() || "brez-obdobja";
             return "VprasalnikDraftBackup::" + period + "::" + getSurveyId();
@@ -3942,14 +3995,14 @@ PO;TO;SR;ČE;PE;SO;NE
                     const q = (getVisibleQuestionConfigs()[questionIndex]) || {};
                     const answer = {
                         questionIndex,
-                        questionId: q.id || "",
+                        questionKey: getQuestionKey(q, questionIndex),
                         type: q.type || null
                     };
 
                     if (q.type === "text_long") {
                         answer.text = card.querySelector(".answer-textarea")?.value || "";
                     } else if (q.type === "yesno") {
-                        answer.choice = card.querySelector("input[type='radio']:checked")?.value || "";
+                        answer.choice = normalizeYesNoChoice(card.querySelector("input[type='radio']:checked")?.value || "");
                     } else if (q.type === "matrix_table") {
                         const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                         const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
@@ -4164,40 +4217,46 @@ PO;TO;SR;ČE;PE;SO;NE
                 const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
 
                 (draft.answers || []).forEach((answer) => {
-                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(answer.questionIndex));
-                if (!card) return;
-                const q = visibleQuestions[questionIndex];
-                if (!q || !card) return;
+                    const match = findVisibleQuestionByAnswer(answer);
+                    const q = match.question;
+                    const questionIndex = match.index;
+                    const card = cards.find(c =>
+                        c.dataset.questionKey === match.key ||
+                        Number(c.dataset.questionIndex) === Number(questionIndex)
+                    );
+                    if (!q || !card || questionIndex < 0) return;
 
-                if (q.type === "text_long") {
-                    const textarea = card.querySelector(".answer-textarea");
-                    if (textarea) textarea.value = answer.text || "";
-                } else if (q.type === "yesno" && answer.choice) {
-                    const radio = card.querySelector('input[type="radio"][value="' + answer.choice + '"]');
-                    if (radio) {
-                        radio.checked = true;
-                        radio.dispatchEvent(new Event("change"));
+                    if (q.type === "text_long") {
+                        const textarea = card.querySelector(".answer-textarea");
+                        if (textarea) textarea.value = answer.text || "";
+                    } else if (q.type === "yesno" && answer.choice) {
+                        const choice = normalizeYesNoChoice(answer.choice);
+                        const radio = Array.from(card.querySelectorAll('input[type="radio"]'))
+                            .find(input => normalizeYesNoChoice(input.value) === choice);
+                        if (radio) {
+                            radio.checked = true;
+                            radio.dispatchEvent(new Event("change"));
+                        }
+                    } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
+                        const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                        const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                        const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
+                        const fileName = answer.matrixCsv
+                            ? ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
+                            : "";
+                        MATRIX_EDITOR_STATE.set(Number(questionIndex), {
+                            rows: normalizedRows,
+                            csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
+                            fileName,
+                            saved: true
+                        });
+                        MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), {
+                            csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
+                            fileName: fileName || ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
+                        });
                     }
-                } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
-                    const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
-                    const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
-                    const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
-                    const fileName = answer.matrixCsv
-                        ? ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
-                        : "";
-                    MATRIX_EDITOR_STATE.set(Number(questionIndex), {
-                        rows: normalizedRows,
-                        csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
-                        fileName,
-                        saved: true
-                    });
-                    MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), {
-                        csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
-                        fileName: fileName || ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
-                    });
-                }
 
-                if (q.child && answer.child) {
+                    if (q.child && answer.child) {
                     const childBox = card.querySelector(".child-box");
                     if (!childBox) return;
 
@@ -4570,23 +4629,33 @@ PO;TO;SR;ČE;PE;SO;NE
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+                downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), fileName);
+                setStatusMessage("fileSaveStatus", "Mušter za konfiguracije »" + fileName + "« je bil shranjen. Odgovore lahko nadaljujete urejati v vprašalniku.", "success");
 
                 const answers = Array.isArray(draftSnapshot.answers) ? draftSnapshot.answers : [];
-                const existingAnswer = answers.find((answer) => Number(answer.questionIndex) === Number(questionIndex));
+                const questionKey = getQuestionKey(questionConfig, Number(questionIndex));
+                const existingAnswer = answers.find((answer) =>
+                    answer.questionKey === questionKey || Number(answer.questionIndex) === Number(questionIndex)
+                );
                 if (existingAnswer) {
+                    existingAnswer.questionIndex = Number(questionIndex);
+                    existingAnswer.questionKey = questionKey;
+                    existingAnswer.type = "matrix_table";
                     existingAnswer.matrixRows = normalizedRows;
                     existingAnswer.matrixCsv = csv;
                 } else {
                     answers.push({
                         questionIndex: Number(questionIndex),
+                        questionKey,
+                        type: "matrix_table",
                         matrixRows: normalizedRows,
                         matrixCsv: csv
                     });
                 }
                 draftSnapshot.answers = answers;
 
-                renderSurvey();
                 applyDraft(draftSnapshot);
+                markAnswersChanged();
                 saveDraftBackup();
                 popup.close();
             });
@@ -4789,6 +4858,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 card.className = "section-question-card";
                 card.dataset.section = String(sectionNumber);
                 card.dataset.questionIndex = String(currentQuestionIndex);
+                card.dataset.questionKey = getQuestionKey(q, currentQuestionIndex);
                 card.dataset.questionType = String(q.type || "");
 
                 const title = document.createElement("div");
