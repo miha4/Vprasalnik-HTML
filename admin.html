@@ -3967,8 +3967,8 @@ PO;TO;SR;ČE;PE;SO;NE
         function getAnswersFileName(includeTimestamp = true) {
             const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
             const safeBase = (String(base || "Vprašalnik")
-                .replace(/[\\/:*?"<>|]+/g, "-")
-                .replace(/\s+/g, " ")
+                .replace(/[\\\\/:*?"<>|]+/g, "-")
+                .replace(/\\s+/g, " ")
                 .trim() || "Vprašalnik");
 
             if (!includeTimestamp) return safeBase + " - baza odgovorov.json";
@@ -4043,8 +4043,8 @@ PO;TO;SR;ČE;PE;SO;NE
 
             if (isDifferentSurvey || isDifferentPeriod) {
                 const proceed = confirm(
-                    "Ta baza odgovorov je bila morda ustvarjena za drug vprašalnik ali drugo obdobje.\n\n" +
-                    "Uvoz lahko preskoči odgovore, ki se ne ujemajo s trenutnim vprašalnikom.\n\n" +
+                    "Ta baza odgovorov je bila morda ustvarjena za drug vprašalnik ali drugo obdobje.\\n\\n" +
+                    "Uvoz lahko preskoči odgovore, ki se ne ujemajo s trenutnim vprašalnikom.\\n\\n" +
                     "Ali vseeno želite nadaljevati?"
                 );
                 if (!proceed) {
