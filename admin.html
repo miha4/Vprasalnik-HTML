@@ -2984,6 +2984,39 @@ PO;TO;SR;ČE;PE;SO;NE
             display: none;
         }
 
+        .top-answer-actions {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .top-answer-actions button {
+            width: auto;
+        }
+
+        .btn-secondary-soft {
+            background: #eef2ff;
+            border-color: #c7d2fe;
+            color: #1d4ed8;
+            font-weight: 700;
+        }
+
+        .btn-danger-subtle {
+            padding: 7px 10px;
+            color: #991b1b;
+            background: #fff;
+            border-color: #fecaca;
+            font-size: 12px;
+            opacity: 0.78;
+        }
+
+        .btn-danger-subtle:hover {
+            opacity: 1;
+            background: #fef2f2;
+        }
+
         .question-image {
             margin: 10px 0 6px;
             max-width: 100%;
@@ -3218,7 +3251,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
         .main-actions {
             display: grid;
-            grid-template-columns: minmax(220px, 1fr);
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
             gap: 10px;
         }
 
@@ -3238,6 +3271,23 @@ PO;TO;SR;ČE;PE;SO;NE
 
         .main-actions .primary-save:hover {
             background: #1d4ed8;
+        }
+
+        .pdf-save {
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .pdf-save:hover {
+            background: #166534;
+            border-color: #166534;
+        }
+
+        .main-actions .pdf-save {
+            font-size: 16px;
+            padding: 14px 18px;
         }
 
         .main-actions .primary-save:disabled {
@@ -3423,7 +3473,11 @@ PO;TO;SR;ČE;PE;SO;NE
                     <input id="surveyUnit" type="hidden" />
                 </div>
             </div>
-                <button type="button" id="resetAnswersBtn">Počisti odgovore</button>
+            <div class="top-answer-actions no-print">
+                <button type="button" id="importAnswersBtn" class="btn-secondary-soft">Uvozi odgovore</button>
+                <button type="button" id="resetAnswersBtn" class="btn-danger-subtle">Počisti odgovore</button>
+                <input id="importAnswersInput" type="file" accept=".json,application/json" class="hidden" />
+            </div>
         </div>
 
         <div id="surveyContainer"></div>
@@ -3431,19 +3485,18 @@ PO;TO;SR;ČE;PE;SO;NE
 
         <div class="card no-print">
             <div class="btns main-actions">
-                <button type="button" id="saveDraftBtn" class="primary-save">Shrani vprašalnik</button>
+                <button type="button" id="saveDraftBtn" class="primary-save">Shrani bazo odgovorov</button>
+                <button type="button" id="printPdfBtn" class="pdf-save">Shrani cel vprašalnik v PDF</button>
             </div>
 
             <div class="muted preserve-wrap save-help">
                 POMOČ:
-                • Kliknite »Shrani vprašalnik«, da se shrani celoten vprašalnik z vsemi odgovori.
-                • Če brskalnik omogoča neposredno shranjevanje, se bo po prvi izbiri datoteke ob naslednjem kliku posodobila ista datoteka.
-                • Če brskalnik tega ne omogoča, se bo v Prenose shranila nova HTML datoteka. Za nadaljevanje vedno odprite zadnjo shranjeno HTML datoteko.
-                • Samodejna kopija v brskalniku je samo dodatna varnostna kopija in lahko izgine, če se pobrišejo podatki brskalnika.
+                • Kliknite »Shrani bazo odgovorov«, da shranite svoje vnose v ločeno datoteko z odgovori.
+                • Za nadaljevanje dela ponovno odprite ta isti vprašalnik in pri vrhu kliknite »Uvozi odgovore«.
+                • Priporočilo: bazo odgovorov shranite tudi pred zapiranjem vprašalnika ali brskalnika.
             </div>
             <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
-            <div id="draftStatus" class="muted save-status">Samodejna varnostna kopija v tem brskalniku še ni osvežena.</div>
-            <div id="fileSaveStatus" class="muted save-status">Vprašalnik še ni ročno shranjen v HTML datoteko.</div>
+            <div id="fileSaveStatus" class="muted save-status">Baza odgovorov še ni izvožena.</div>
         </div>
     </div>
 
@@ -3452,10 +3505,9 @@ PO;TO;SR;ČE;PE;SO;NE
     <script>
         const CONFIG = ${json};
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
-        const DRAFT_SAVE_HANDLES = new Map();
-        let DRAFT_FILE_HANDLE = null;
-        let DRAFT_DIRECTORY_HANDLE = null;
         let PRINT_DIRECTORY_HANDLE = null;
+        let HAS_UNEXPORTED_CHANGES = false;
+        let IS_APPLYING_DRAFT = false;
         const MATRIX_CSV_ATTACHMENTS = new Map();
         const MATRIX_EDITOR_STATE = new Map();
 
@@ -3569,6 +3621,46 @@ PO;TO;SR;ČE;PE;SO;NE
             return "sid_" + simpleHash(base);
         }
 
+        function getQuestionKey(question, fallbackIndex = 0) {
+            const source = question && typeof question === "object" ? question : {};
+            if (source.id) return String(source.id);
+            const stableParts = {
+                sectionId: source.sectionId || "",
+                type: source.type || "",
+                text: source.text || "",
+                childText: source.child?.text || "",
+                matrixRows: source.matrix?.rows || "",
+                matrixCols: source.matrix?.cols || ""
+            };
+            const stableSource = JSON.stringify(stableParts);
+            if (stableSource.replace(/[{}":,]/g, "").trim()) {
+                return "q_" + simpleHash(stableSource);
+            }
+            return "q_index_" + (Number(fallbackIndex) || 0);
+        }
+
+        function normalizeYesNoChoice(value) {
+            const normalized = String(value || "").trim().toUpperCase();
+            if (normalized === "DA" || normalized === "YES" || normalized === "TRUE") return "DA";
+            if (normalized === "NE" || normalized === "NO" || normalized === "FALSE") return "NE";
+            return normalized;
+        }
+
+        function findVisibleQuestionByAnswer(answer) {
+            const visibleQuestions = getVisibleQuestionConfigs();
+            const key = String(answer?.questionKey || "");
+            if (key) {
+                const keyIndex = visibleQuestions.findIndex((question, index) => getQuestionKey(question, index) === key);
+                if (keyIndex >= 0) return { question: visibleQuestions[keyIndex], index: keyIndex, key };
+            }
+            const fallbackIndex = Number(answer?.questionIndex);
+            if (Number.isInteger(fallbackIndex) && fallbackIndex >= 0 && fallbackIndex < visibleQuestions.length) {
+                const question = visibleQuestions[fallbackIndex];
+                return { question, index: fallbackIndex, key: getQuestionKey(question, fallbackIndex) };
+            }
+            return { question: null, index: -1, key };
+        }
+
         function getDraftStorageKey() {
             const period = (RUNTIME_CONFIG.surveyPeriod || "brez-obdobja").trim() || "brez-obdobja";
             return "VprasalnikDraftBackup::" + period + "::" + getSurveyId();
@@ -3608,9 +3700,8 @@ PO;TO;SR;ČE;PE;SO;NE
         function saveDraftBackup() {
             try {
                 localStorage.setItem(getDraftStorageKey(), JSON.stringify(collectDraft()));
-                setStatusMessage("draftStatus", "Samodejna varnostna kopija v tem brskalniku: " + formatStatusDateTime() + ".", "success");
             } catch {
-                setStatusMessage("draftStatus", "Samodejne varnostne kopije v brskalniku ni bilo mogoče shraniti. Uporabite gumb »Shrani vprašalnik«.", "warning");
+                // Tiha lokalna kopija je samo interna zaščita; uporabniku kot glavni način shranjevanja ostane izvoz baze odgovorov.
             }
         }
 
@@ -3725,8 +3816,8 @@ PO;TO;SR;ČE;PE;SO;NE
                 .slice(0, 80) || "matrika";
         }
 
-        function downloadMatrixCsvAttachments() {
-            const csvArtifacts = getCurrentMatrixCsvArtifacts();
+        function downloadMatrixCsvAttachments(sectionIndex = null) {
+            const csvArtifacts = getCurrentMatrixCsvArtifacts(sectionIndex);
             csvArtifacts.forEach((artifact) => {
                 downloadBlob(new Blob([artifact.csv], { type: "text/csv;charset=utf-8" }), artifact.fileName);
                 MATRIX_CSV_ATTACHMENTS.set(Number(artifact.questionIndex), { csv: artifact.csv, fileName: artifact.fileName });
@@ -3783,9 +3874,10 @@ PO;TO;SR;ČE;PE;SO;NE
             return base + ".csv";
         }
 
-        function getCurrentMatrixCsvArtifacts() {
+        function getCurrentMatrixCsvArtifacts(sectionIndex = null) {
             const matrixCards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"))
-                .filter(card => card.dataset.questionType === "matrix_table");
+                .filter(card => card.dataset.questionType === "matrix_table")
+                .filter(card => sectionIndex == null || Number(card.dataset.section) === Number(sectionIndex));
             const total = matrixCards.length;
             return matrixCards.map((card, index) => {
                 const questionIndex = Number(card.dataset.questionIndex || index);
@@ -3856,16 +3948,21 @@ PO;TO;SR;ČE;PE;SO;NE
                 surveyDate: document.getElementById("surveyDate").value || "",
                 answers: cards.map((card) => {
                     const questionIndex = Number(card.dataset.questionIndex);
-                    const q = (getVisibleQuestionConfigs()[questionIndex]) || {};
+                    const matched = findVisibleQuestionByAnswer({
+                        questionKey: card.dataset.questionKey || "",
+                        questionIndex
+                    });
+                    const q = matched.question || getVisibleQuestionConfigs()[questionIndex] || {};
                     const answer = {
                         questionIndex,
+                        questionKey: card.dataset.questionKey || getQuestionKey(q, questionIndex),
                         type: q.type || null
                     };
 
                     if (q.type === "text_long") {
                         answer.text = card.querySelector(".answer-textarea")?.value || "";
                     } else if (q.type === "yesno") {
-                        answer.choice = card.querySelector("input[type='radio']:checked")?.value || "";
+                        answer.choice = normalizeYesNoChoice(card.querySelector("input[type='radio']:checked")?.value || "");
                     } else if (q.type === "matrix_table") {
                         const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
                         const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
@@ -3897,109 +3994,113 @@ PO;TO;SR;ČE;PE;SO;NE
             };
         }
 
-        function injectDraftIntoCurrentHtml(draft) {
-            const html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
-            const safeJson = JSON.stringify(draft)
-                .replace(/</g, "\\u003c")
-                .replace(/>/g, "\\u003e")
-                .replace(/&/g, "\\u0026");
-            const pattern = /(<template id="savedDraftData">)([\\s\\S]*?)(<\\/template>)/;
-            if (pattern.test(html)) {
-                return html.replace(pattern, "$1" + safeJson + "$3");
-            }
-            return html;
-        }
+        function getAnswersFileName(includeTimestamp = true) {
+            const parts = [
+                "Odgovori",
+                getSelectedUnitValue(),
+                getSelectedPersonName()
+            ].map(part => sanitizeFilePart(part)).filter(Boolean);
+            const baseName = parts.join(" - ") || "Odgovori";
 
-        function getDraftFileName(includeTimestamp = false) {
-            const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
-            const safeBase = (String(base || "Vprašalnik")
-                .replace(/[\\/:*?"<>|]+/g, "-")
-                .replace(/\s+/g, " ")
-                .trim() || "Vprašalnik");
-
-            if (!includeTimestamp) return safeBase + ".html";
+            if (!includeTimestamp) return baseName + ".json";
 
             const now = new Date();
-            const stamp = [
-                now.getFullYear(),
-                String(now.getMonth() + 1).padStart(2, "0"),
-                String(now.getDate()).padStart(2, "0"),
-                String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0")
-            ].join("-");
-            return safeBase + " - " + stamp + ".html";
+            const stamp = String(now.getFullYear()).slice(2) +
+                String(now.getMonth() + 1).padStart(2, "0") +
+                String(now.getDate()).padStart(2, "0") + "-" +
+                String(now.getHours()).padStart(2, "0") +
+                String(now.getMinutes()).padStart(2, "0");
+            return baseName + " - " + stamp + ".json";
         }
 
-        async function ensureWritableFileHandle(fileHandle) {
-            if (!fileHandle) return false;
-            if (!fileHandle.queryPermission || !fileHandle.requestPermission) return true;
-            const options = { mode: "readwrite" };
-            if (await fileHandle.queryPermission(options) === "granted") return true;
-            return await fileHandle.requestPermission(options) === "granted";
+        function buildAnswersExportPayload() {
+            const draft = collectDraft(null);
+            return {
+                ...draft,
+                exportType: "vprasalnik_answers",
+                exportLabel: "Baza odgovorov",
+                exportedAt: new Date().toISOString()
+            };
         }
 
-        async function saveHtmlDraftFile(htmlContent) {
-            if (window.showSaveFilePicker) {
-                const pickerOptions = {
-                    suggestedName: getDraftFileName(false),
-                    types: [{
-                        description: "HTML vprašalnik z odgovori",
-                        accept: {
-                            "text/html": [".html"]
-                        }
-                    }]
-                };
-
-                const fileHandle = DRAFT_FILE_HANDLE || await window.showSaveFilePicker(pickerOptions);
-                const hasPermission = await ensureWritableFileHandle(fileHandle);
-                if (!hasPermission) {
-                    throw new Error("Brskalnik ni dovolil pisanja v izbrano datoteko.");
-                }
-
-                const writable = await fileHandle.createWritable();
-                await writable.write(htmlContent);
-                await writable.close();
-                DRAFT_FILE_HANDLE = fileHandle;
-                return { mode: "saved", fileName: fileHandle.name || getDraftFileName(false) };
-            }
-
-            const fileName = getDraftFileName(true);
-            downloadBlob(new Blob([htmlContent], { type: "text/html;charset=utf-8" }), fileName);
-            return { mode: "downloaded", fileName };
+        function markAnswersChanged() {
+            if (IS_APPLYING_DRAFT) return;
+            HAS_UNEXPORTED_CHANGES = true;
+            setStatusMessage("fileSaveStatus", "Odgovori so spremenjeni. Pred zapiranjem priporočamo izvoz baze odgovorov.", "warning");
         }
 
-        async function saveDraftToFile() {
+        async function exportAnswersToFile() {
             const saveButton = document.getElementById("saveDraftBtn");
             try {
-                const draft = collectDraft(null);
-                setStatusMessage("fileSaveStatus", "Ta HTML datoteka vsebuje odgovore, pripravljene za shranjevanje ob " + formatStatusDateTime(new Date(draft.savedAt)) + ".", "success");
-                const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
+                const payload = buildAnswersExportPayload();
+                const safeJson = JSON.stringify(payload, null, 2);
 
                 if (saveButton) {
                     saveButton.disabled = true;
                     saveButton.textContent = "Shranjujem ...";
                 }
-                setStatusMessage("fileSaveStatus", "Shranjujem vprašalnik ...", "");
+                setStatusMessage("fileSaveStatus", "Pripravljam bazo odgovorov za shranjevanje ...", "");
 
-                const result = await saveHtmlDraftFile(htmlWithDraft);
+                downloadBlob(new Blob([safeJson], { type: "application/json;charset=utf-8" }), getAnswersFileName(true));
                 saveDraftBackup();
-
-                if (result.mode === "saved") {
-                    setStatusMessage("fileSaveStatus", "Vprašalnik je shranjen v datoteko »" + result.fileName + "« ob " + formatStatusDateTime() + ". Naslednji klik bo v tem odprtem oknu posodobil isto datoteko.", "success");
-                } else {
-                    setStatusMessage("fileSaveStatus", "Vprašalnik je shranjen kot nova HTML datoteka »" + result.fileName + "« v Prenose ob " + formatStatusDateTime() + ". Za nadaljevanje odprite zadnjo shranjeno datoteko.", "warning");
-                }
+                HAS_UNEXPORTED_CHANGES = false;
+                setStatusMessage("fileSaveStatus", "Baza odgovorov je bila izvožena ob " + formatStatusDateTime() + ". To datoteko lahko kasneje uvozite v isti vprašalnik.", "success");
             } catch (err) {
-                if (err?.name === "AbortError") {
-                    setStatusMessage("fileSaveStatus", "Shranjevanje je bilo preklicano. Odgovori ostanejo v odprtem vprašalniku, vendar datoteka ni bila posodobljena.", "warning");
-                    return;
-                }
-                console.error("Shranjevanje vprašalnika ni uspelo:", err);
-                setStatusMessage("fileSaveStatus", "Shranjevanje ni uspelo. Poskusite še enkrat ali uporabite drug brskalnik.", "error");
+                console.error("Izvoz baze odgovorov ni uspel:", err);
+                setStatusMessage("fileSaveStatus", "Izvoz baze odgovorov ni uspel. Poskusite še enkrat.", "error");
             } finally {
                 if (saveButton) {
                     saveButton.disabled = false;
-                    saveButton.textContent = "Shrani vprašalnik";
+                    saveButton.textContent = "Shrani bazo odgovorov";
                 }
+            }
+        }
+
+        function validateImportedAnswers(draft) {
+            if (!draft || typeof draft !== "object") {
+                throw new Error("Datoteka ni veljavna baza odgovorov.");
+            }
+            if (!Array.isArray(draft.answers)) {
+                throw new Error("Datoteka ne vsebuje odgovorov.");
+            }
+
+            const importedSurveyId = String(draft.surveyId || "");
+            const currentSurveyId = String(getSurveyId() || "");
+            const importedPeriod = String(draft.surveyPeriod || "");
+            const currentPeriod = String(RUNTIME_CONFIG.surveyPeriod || "");
+            const isDifferentSurvey = importedSurveyId && currentSurveyId && importedSurveyId !== currentSurveyId;
+            const isDifferentPeriod = importedPeriod && currentPeriod && importedPeriod !== currentPeriod;
+
+            if (isDifferentSurvey || isDifferentPeriod) {
+                const proceed = confirm(
+                    "Ta baza odgovorov je bila morda ustvarjena za drug vprašalnik ali drugo obdobje.\\n\\n" +
+                    "Uvoz lahko preskoči odgovore, ki se ne ujemajo s trenutnim vprašalnikom.\\n\\n" +
+                    "Ali vseeno želite nadaljevati?"
+                );
+                if (!proceed) {
+                    const error = new Error("Uvoz je bil preklican.");
+                    error.name = "AbortError";
+                    throw error;
+                }
+            }
+        }
+
+        async function importAnswersFile(file) {
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const draft = JSON.parse(text);
+                validateImportedAnswers(draft);
+                applyDraft(draft);
+                HAS_UNEXPORTED_CHANGES = false;
+                setStatusMessage("fileSaveStatus", "Baza odgovorov »" + file.name + "« je bila uvožena ob " + formatStatusDateTime() + ".", "success");
+            } catch (err) {
+                if (err?.name === "AbortError") {
+                    setStatusMessage("fileSaveStatus", "Uvoz baze odgovorov je bil preklican.", "warning");
+                    return;
+                }
+                console.error("Uvoz baze odgovorov ni uspel:", err);
+                setStatusMessage("fileSaveStatus", err?.message || "Uvoz baze odgovorov ni uspel.", "error");
             }
         }
 
@@ -4022,56 +4123,99 @@ PO;TO;SR;ČE;PE;SO;NE
             clearDraftBackup();
             updateDocumentTitleForPdf();
 
+            HAS_UNEXPORTED_CHANGES = false;
+            setStatusMessage("fileSaveStatus", "Odgovori so bili pobrisani. Bazo odgovorov izvozite, ko boste dodali nove odgovore.", "warning");
             alert("Vsi odgovori in lokalno shranjen osnutek so bili pobrisani.");
+        }
+
+        function applyMatrixAnswersToState(draft) {
+            if (!draft || !Array.isArray(draft.answers)) return;
+            draft.answers.forEach((answer) => {
+                const match = findVisibleQuestionByAnswer(answer);
+                if (!match.question || !Array.isArray(answer.matrixRows)) return;
+                const card = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]")).find(c =>
+                    c.dataset.questionKey === match.key || Number(c.dataset.questionIndex) === Number(match.index)
+                );
+                const questionIndex = Number(card?.dataset.questionIndex ?? match.index);
+                if (!Number.isFinite(questionIndex) || questionIndex < 0) return;
+                const rows = Math.max(1, Number.parseInt(String(match.question.matrix?.rows || 0), 10) || 1);
+                const cols = Math.max(1, Number.parseInt(String(match.question.matrix?.cols || 0), 10) || 1);
+                const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(match.question, rows, cols));
+                const csv = answer.matrixCsv || matrixValuesToCsv(normalizedRows);
+                const fileName = answer.matrixCsv ? ("Matrika-" + (questionIndex + 1) + ".csv") : "";
+                MATRIX_EDITOR_STATE.set(questionIndex, {
+                    rows: normalizedRows,
+                    csv,
+                    fileName,
+                    saved: true
+                });
+                MATRIX_CSV_ATTACHMENTS.set(questionIndex, {
+                    csv,
+                    fileName: fileName || ("Matrika-" + (questionIndex + 1) + ".csv")
+                });
+            });
         }
 
         function applyDraft(draft, sectionIndex = null) {
             if (!draft || typeof draft !== "object") {
-                alert("Osnutek ni veljaven.");
+                alert("Baza odgovorov ni veljavna.");
                 return;
             }
 
-            document.getElementById("personName").value = draft.personName || "";
-            document.getElementById("surveyDate").value = draft.surveyDate || "";
-            renderSurvey();
+            IS_APPLYING_DRAFT = true;
+            try {
+                document.getElementById("personName").value = draft.personName || "";
+                document.getElementById("surveyDate").value = draft.surveyDate || "";
+                document.getElementById("surveyUnit").value = draft.surveyUnit || draft.selectedUnit || "";
+                document.getElementById("surveyUnitDisplay").value = draft.surveyUnit || draft.selectedUnit || "";
+                renderSurvey();
+                applyMatrixAnswersToState(draft);
+                renderSurvey();
 
-            const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
+                const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
 
-            (draft.answers || []).forEach((answer) => {
-                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(answer.questionIndex));
-                if (!card) return;
-                const q = getVisibleQuestionConfigs()[Number(answer.questionIndex)];
-                if (!q || !card) return;
+                (draft.answers || []).forEach((answer) => {
+                    const match = findVisibleQuestionByAnswer(answer);
+                    const q = match.question;
+                    const questionIndex = match.index;
+                    const card = cards.find(c =>
+                        c.dataset.questionKey === match.key ||
+                        Number(c.dataset.questionIndex) === Number(questionIndex)
+                    );
+                    if (!q || !card || questionIndex < 0) return;
+                    const cardQuestionIndex = Number(card.dataset.questionIndex || questionIndex);
 
-                if (q.type === "text_long") {
-                    const textarea = card.querySelector(".answer-textarea");
-                    if (textarea) textarea.value = answer.text || "";
-                } else if (q.type === "yesno" && answer.choice) {
-                    const radio = card.querySelector('input[type="radio"][value="' + answer.choice + '"]');
-                    if (radio) {
-                        radio.checked = true;
-                        radio.dispatchEvent(new Event("change"));
+                    if (q.type === "text_long") {
+                        const textarea = card.querySelector(".answer-textarea");
+                        if (textarea) textarea.value = answer.text || "";
+                    } else if (q.type === "yesno" && answer.choice) {
+                        const choice = normalizeYesNoChoice(answer.choice);
+                        const radio = Array.from(card.querySelectorAll('input[type="radio"]'))
+                            .find(input => normalizeYesNoChoice(input.value) === choice);
+                        if (radio) {
+                            radio.checked = true;
+                            radio.dispatchEvent(new Event("change"));
+                        }
+                    } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
+                        const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
+                        const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
+                        const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
+                        const fileName = answer.matrixCsv
+                            ? ("Matrika-" + (Number(cardQuestionIndex) + 1) + ".csv")
+                            : "";
+                        MATRIX_EDITOR_STATE.set(Number(cardQuestionIndex), {
+                            rows: normalizedRows,
+                            csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
+                            fileName,
+                            saved: true
+                        });
+                        MATRIX_CSV_ATTACHMENTS.set(Number(cardQuestionIndex), {
+                            csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
+                            fileName: fileName || ("Matrika-" + (Number(cardQuestionIndex) + 1) + ".csv")
+                        });
                     }
-                } else if (q.type === "matrix_table" && Array.isArray(answer.matrixRows)) {
-                    const rows = Math.max(1, Number.parseInt(String(q.matrix?.rows || 0), 10) || 1);
-                    const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
-                    const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
-                    const fileName = answer.matrixCsv
-                        ? ("Matrika-" + (Number(answer.questionIndex) + 1) + ".csv")
-                        : "";
-                    MATRIX_EDITOR_STATE.set(Number(answer.questionIndex), {
-                        rows: normalizedRows,
-                        csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
-                        fileName,
-                        saved: true
-                    });
-                    MATRIX_CSV_ATTACHMENTS.set(Number(answer.questionIndex), {
-                        csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
-                        fileName: fileName || ("Matrika-" + (Number(answer.questionIndex) + 1) + ".csv")
-                    });
-                }
 
-                if (q.child && answer.child) {
+                    if (q.child && answer.child) {
                     const childBox = card.querySelector(".child-box");
                     if (!childBox) return;
 
@@ -4108,7 +4252,10 @@ PO;TO;SR;ČE;PE;SO;NE
                 }
             });
 
-            saveDraftBackup();
+                saveDraftBackup();
+            } finally {
+                IS_APPLYING_DRAFT = false;
+            }
         }
 
         function getPdfFileName() {
@@ -4409,6 +4556,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+                markAnswersChanged();
                 saveDraftBackup();
             };
 
@@ -4440,23 +4588,32 @@ PO;TO;SR;ČE;PE;SO;NE
                     saved: true
                 });
                 MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), { csv, fileName });
+                setStatusMessage("fileSaveStatus", "Mušter za konfiguracije je shranjen v vprašalniku. CSV se bo prenesel ob izvozu tega dela ali celotnega vprašalnika v PDF.", "success");
 
                 const answers = Array.isArray(draftSnapshot.answers) ? draftSnapshot.answers : [];
-                const existingAnswer = answers.find((answer) => Number(answer.questionIndex) === Number(questionIndex));
+                const questionKey = getQuestionKey(questionConfig, Number(questionIndex));
+                const existingAnswer = answers.find((answer) =>
+                    answer.questionKey === questionKey || Number(answer.questionIndex) === Number(questionIndex)
+                );
                 if (existingAnswer) {
+                    existingAnswer.questionIndex = Number(questionIndex);
+                    existingAnswer.questionKey = questionKey;
+                    existingAnswer.type = "matrix_table";
                     existingAnswer.matrixRows = normalizedRows;
                     existingAnswer.matrixCsv = csv;
                 } else {
                     answers.push({
                         questionIndex: Number(questionIndex),
+                        questionKey,
+                        type: "matrix_table",
                         matrixRows: normalizedRows,
                         matrixCsv: csv
                     });
                 }
                 draftSnapshot.answers = answers;
 
-                renderSurvey();
                 applyDraft(draftSnapshot);
+                markAnswersChanged();
                 saveDraftBackup();
                 popup.close();
             });
@@ -4496,7 +4653,7 @@ PO;TO;SR;ČE;PE;SO;NE
             card.className = "section-actions-card no-print";
             card.innerHTML =
                 '<div class="btns">' +
-                    '<button type="button" data-section-action="print" data-section="' + sectionIndex + '">Natisni / Shrani v PDF</button>' +
+                    '<button type="button" class="pdf-save" data-section-action="print" data-section="' + sectionIndex + '">Izvozi ' + sectionIndex + '. del v PDF</button>' +
                 '</div>';
             return card;
         }
@@ -4596,6 +4753,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const unitHiddenInput = document.getElementById("surveyUnit");
             const unitDisplayInput = document.getElementById("surveyUnitDisplay");
             const previousPerson = personSelect.value;
+            const previousUnit = unitHiddenInput.value || unitDisplayInput.value || "";
             const people = Array.isArray(RUNTIME_CONFIG.personUnitMap) ? RUNTIME_CONFIG.personUnitMap : [];
 
             personSelect.innerHTML = '<option value="">-- izberi osebo --</option>';
@@ -4612,7 +4770,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
             const selectedPerson = personSelect.value || "";
             const selectedPersonEntry = people.find(entry => entry.name === selectedPerson);
-            const selectedUnit = selectedPersonEntry?.unit || "";
+            const selectedUnit = selectedPersonEntry?.unit || (IS_APPLYING_DRAFT ? previousUnit : "");
             unitHiddenInput.value = selectedUnit;
             unitDisplayInput.value = selectedUnit;
             const container = document.getElementById("surveyContainer");
@@ -4659,6 +4817,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 card.className = "section-question-card";
                 card.dataset.section = String(sectionNumber);
                 card.dataset.questionIndex = String(currentQuestionIndex);
+                card.dataset.questionKey = getQuestionKey(q, currentQuestionIndex);
                 card.dataset.questionType = String(q.type || "");
 
                 const title = document.createElement("div");
@@ -4956,16 +5115,33 @@ PO;TO;SR;ČE;PE;SO;NE
         document.getElementById("personName").addEventListener("change", () => {
             updateDocumentTitleForPdf();
             renderSurvey();
+            markAnswersChanged();
             saveDraftBackup();
         });
 
         document.addEventListener("input", (event) => {
             if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            markAnswersChanged();
+            saveDraftBackup();
+        });
+
+        document.addEventListener("change", (event) => {
+            if (!event.target.closest("#surveyContainer, .top-grid")) return;
+            markAnswersChanged();
             saveDraftBackup();
         });
 
         window.addEventListener("pagehide", () => {
             saveDraftBackup();
+        });
+
+        window.addEventListener("beforeunload", (event) => {
+            saveDraftBackup();
+            if (!HAS_UNEXPORTED_CHANGES) return;
+            const message = "Ali želite zapreti vprašalnik? Če ga še niste zaključili, najprej shranite bazo odgovorov, sicer se lahko podatki izgubijo.";
+            event.preventDefault();
+            event.returnValue = message;
+            return message;
         });
 
         window.addEventListener("beforeprint", () => {
@@ -4989,7 +5165,15 @@ PO;TO;SR;ČE;PE;SO;NE
         }
         const printAndMailBtn = document.getElementById("printAndMailBtn");
         if (printAndMailBtn) printAndMailBtn.addEventListener("click", printAndMail);
-        document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
+        document.getElementById("saveDraftBtn").addEventListener("click", exportAnswersToFile);
+        document.getElementById("importAnswersBtn").addEventListener("click", () => {
+            document.getElementById("importAnswersInput").click();
+        });
+        document.getElementById("importAnswersInput").addEventListener("change", (event) => {
+            const file = event.target.files?.[0];
+            if (file) importAnswersFile(file);
+            event.target.value = "";
+        });
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
 
         document.addEventListener("click", async (event) => {
@@ -4999,11 +5183,11 @@ PO;TO;SR;ČE;PE;SO;NE
             const action = btn.dataset.sectionAction;
 
             if (action === "print") {
-                const csvArtifacts = downloadMatrixCsvAttachments();
+                const csvArtifacts = downloadMatrixCsvAttachments(sectionIndex);
                 notifyCsvDownload(csvArtifacts);
                 printSection(sectionIndex);
             } else if (action === "mail") {
-                const csvArtifacts = downloadMatrixCsvAttachments();
+                const csvArtifacts = downloadMatrixCsvAttachments(sectionIndex);
                 notifyCsvDownload(csvArtifacts);
                 const mailOpened = openMailClient();
                 if (mailOpened) {
