@@ -3218,7 +3218,7 @@ PO;TO;SR;ČE;PE;SO;NE
 
         .main-actions {
             display: grid;
-            grid-template-columns: minmax(220px, 1fr);
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
             gap: 10px;
         }
 
@@ -3227,20 +3227,41 @@ PO;TO;SR;ČE;PE;SO;NE
             min-width: 0;
         }
 
-        .main-actions .primary-save {
-            background: #2563eb;
-            border-color: #2563eb;
-            color: #fff;
+        .main-actions .secondary-action {
+            background: #fff;
+            color: #1f2937;
+            border-color: #cbd5e1;
             font-weight: 700;
+        }
+
+        .main-actions .secondary-action:hover {
+            background: #f8fafc;
+        }
+
+        .final-actions {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr);
+            gap: 10px;
+        }
+
+        .final-actions .final-pdf {
+            width: 100%;
+            min-width: 0;
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 800;
             font-size: 16px;
             padding: 14px 18px;
         }
 
-        .main-actions .primary-save:hover {
-            background: #1d4ed8;
+        .final-actions .final-pdf:hover {
+            background: #166534;
         }
 
-        .main-actions .primary-save:disabled {
+        .main-actions button:disabled,
+        .final-actions button:disabled {
             cursor: wait;
             opacity: 0.72;
         }
@@ -3248,6 +3269,17 @@ PO;TO;SR;ČE;PE;SO;NE
         .save-help {
             margin-top: 10px;
             line-height: 1.45;
+        }
+
+        .action-heading {
+            font-weight: 800;
+            margin: 0 0 8px;
+        }
+
+        .final-output-box {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
         }
 
         .save-status {
@@ -3430,20 +3462,28 @@ PO;TO;SR;ČE;PE;SO;NE
         <div id="matrixPrintAppendix" class="card matrix-print-appendix hidden"></div>
 
         <div class="card no-print">
+            <div class="action-heading">Delo z odgovori</div>
             <div class="btns main-actions">
-                <button type="button" id="saveDraftBtn" class="primary-save">Shrani vprašalnik</button>
+                <button type="button" id="saveAnswersBtn" class="secondary-action">Shrani odgovore</button>
+                <button type="button" id="importAnswersBtn" class="secondary-action">Uvozi odgovore</button>
+                <input id="importAnswersInput" type="file" accept=".json,application/json" class="hidden" />
             </div>
 
             <div class="muted preserve-wrap save-help">
-                POMOČ:
-                • Kliknite »Shrani vprašalnik«, da se shrani celoten vprašalnik z vsemi odgovori.
-                • Če brskalnik omogoča neposredno shranjevanje, se bo po prvi izbiri datoteke ob naslednjem kliku posodobila ista datoteka.
-                • Če brskalnik tega ne omogoča, se bo v Prenose shranila nova HTML datoteka. Za nadaljevanje vedno odprite zadnjo shranjeno HTML datoteko.
-                • Samodejna kopija v brskalniku je samo dodatna varnostna kopija in lahko izgine, če se pobrišejo podatki brskalnika.
+                Če vprašalnika ne boste izpolnili do konca, kliknite »Shrani odgovore«.
+                Ko želite nadaljevati, odprite vprašalnik, kliknite »Uvozi odgovore« in izberite zadnjo shranjeno datoteko z odgovori.
+                Samodejna kopija v brskalniku je samo dodatna varnostna kopija in lahko izgine, če se pobrišejo podatki brskalnika.
             </div>
-            <div id="outputDirStatus" class="muted" style="margin-top:8px;"></div>
+            <div id="answersStatus" class="muted save-status">Odgovori še niso ročno shranjeni v datoteko.</div>
             <div id="draftStatus" class="muted save-status">Samodejna varnostna kopija v tem brskalniku še ni osvežena.</div>
-            <div id="fileSaveStatus" class="muted save-status">Vprašalnik še ni ročno shranjen v HTML datoteko.</div>
+
+            <div class="final-output-box">
+                <div class="action-heading">Zaključeni vprašalnik</div>
+                <div class="final-actions">
+                    <button type="button" id="printPdfBtn" class="final-pdf">Shrani zaključen vprašalnik v PDF</button>
+                </div>
+                <div class="muted preserve-wrap save-help">Ko je vprašalnik dokončan, ga shranite v PDF in ta PDF pošljite planerju.</div>
+            </div>
         </div>
     </div>
 
@@ -3452,9 +3492,6 @@ PO;TO;SR;ČE;PE;SO;NE
     <script>
         const CONFIG = ${json};
         const RUNTIME_CONFIG = normalizeRuntimeConfig(CONFIG);
-        const DRAFT_SAVE_HANDLES = new Map();
-        let DRAFT_FILE_HANDLE = null;
-        let DRAFT_DIRECTORY_HANDLE = null;
         let PRINT_DIRECTORY_HANDLE = null;
         const MATRIX_CSV_ATTACHMENTS = new Map();
         const MATRIX_EDITOR_STATE = new Map();
@@ -3610,7 +3647,7 @@ PO;TO;SR;ČE;PE;SO;NE
                 localStorage.setItem(getDraftStorageKey(), JSON.stringify(collectDraft()));
                 setStatusMessage("draftStatus", "Samodejna varnostna kopija v tem brskalniku: " + formatStatusDateTime() + ".", "success");
             } catch {
-                setStatusMessage("draftStatus", "Samodejne varnostne kopije v brskalniku ni bilo mogoče shraniti. Uporabite gumb »Shrani vprašalnik«.", "warning");
+                setStatusMessage("draftStatus", "Samodejne varnostne kopije v brskalniku ni bilo mogoče shraniti. Uporabite gumb »Shrani odgovore«.", "warning");
             }
         }
 
@@ -3859,6 +3896,7 @@ PO;TO;SR;ČE;PE;SO;NE
                     const q = (getVisibleQuestionConfigs()[questionIndex]) || {};
                     const answer = {
                         questionIndex,
+                        questionId: q.id || "",
                         type: q.type || null
                     };
 
@@ -3910,15 +3948,10 @@ PO;TO;SR;ČE;PE;SO;NE
             return html;
         }
 
-        function getDraftFileName(includeTimestamp = false) {
-            const base = applyRuntimePlaceholders(RUNTIME_CONFIG.pdfFileName || "Vprašalnik {obdobje} - {enota} - {imeinpriimek}");
-            const safeBase = (String(base || "Vprašalnik")
-                .replace(/[\\/:*?"<>|]+/g, "-")
-                .replace(/\s+/g, " ")
-                .trim() || "Vprašalnik");
-
-            if (!includeTimestamp) return safeBase + ".html";
-
+        function getAnswersFileName() {
+            const period = sanitizeFilePart(RUNTIME_CONFIG.surveyPeriod || "brez-obdobja");
+            const unit = sanitizeFilePart(document.getElementById("surveyUnit")?.value || "brez-enote");
+            const person = sanitizeFilePart(document.getElementById("personName")?.value || "brez-osebe");
             const now = new Date();
             const stamp = [
                 now.getFullYear(),
@@ -3926,81 +3959,86 @@ PO;TO;SR;ČE;PE;SO;NE
                 String(now.getDate()).padStart(2, "0"),
                 String(now.getHours()).padStart(2, "0") + String(now.getMinutes()).padStart(2, "0")
             ].join("-");
-            return safeBase + " - " + stamp + ".html";
+            return "Odgovori - " + period + " - " + unit + " - " + person + " - " + stamp + ".json";
         }
 
-        async function ensureWritableFileHandle(fileHandle) {
-            if (!fileHandle) return false;
-            if (!fileHandle.queryPermission || !fileHandle.requestPermission) return true;
-            const options = { mode: "readwrite" };
-            if (await fileHandle.queryPermission(options) === "granted") return true;
-            return await fileHandle.requestPermission(options) === "granted";
+        function prepareAnswersDraft() {
+            const draft = collectDraft(null);
+            return {
+                ...draft,
+                fileType: "vprasalnik_answers",
+                exportedAt: new Date().toISOString()
+            };
         }
 
-        async function saveHtmlDraftFile(htmlContent) {
-            if (window.showSaveFilePicker) {
-                const pickerOptions = {
-                    suggestedName: getDraftFileName(false),
-                    types: [{
-                        description: "HTML vprašalnik z odgovori",
-                        accept: {
-                            "text/html": [".html"]
-                        }
-                    }]
-                };
-
-                const fileHandle = DRAFT_FILE_HANDLE || await window.showSaveFilePicker(pickerOptions);
-                const hasPermission = await ensureWritableFileHandle(fileHandle);
-                if (!hasPermission) {
-                    throw new Error("Brskalnik ni dovolil pisanja v izbrano datoteko.");
-                }
-
-                const writable = await fileHandle.createWritable();
-                await writable.write(htmlContent);
-                await writable.close();
-                DRAFT_FILE_HANDLE = fileHandle;
-                return { mode: "saved", fileName: fileHandle.name || getDraftFileName(false) };
-            }
-
-            const fileName = getDraftFileName(true);
-            downloadBlob(new Blob([htmlContent], { type: "text/html;charset=utf-8" }), fileName);
-            return { mode: "downloaded", fileName };
-        }
-
-        async function saveDraftToFile() {
-            const saveButton = document.getElementById("saveDraftBtn");
+        async function saveAnswersToFile() {
+            const saveButton = document.getElementById("saveAnswersBtn");
             try {
-                const draft = collectDraft(null);
-                setStatusMessage("fileSaveStatus", "Ta HTML datoteka vsebuje odgovore, pripravljene za shranjevanje ob " + formatStatusDateTime(new Date(draft.savedAt)) + ".", "success");
-                const htmlWithDraft = injectDraftIntoCurrentHtml(draft);
-
                 if (saveButton) {
                     saveButton.disabled = true;
                     saveButton.textContent = "Shranjujem ...";
                 }
-                setStatusMessage("fileSaveStatus", "Shranjujem vprašalnik ...", "");
 
-                const result = await saveHtmlDraftFile(htmlWithDraft);
+                const draft = prepareAnswersDraft();
+                const fileName = getAnswersFileName();
+                const blob = new Blob([JSON.stringify(draft, null, 2)], { type: "application/json;charset=utf-8" });
+                downloadBlob(blob, fileName);
                 saveDraftBackup();
-
-                if (result.mode === "saved") {
-                    setStatusMessage("fileSaveStatus", "Vprašalnik je shranjen v datoteko »" + result.fileName + "« ob " + formatStatusDateTime() + ". Naslednji klik bo v tem odprtem oknu posodobil isto datoteko.", "success");
-                } else {
-                    setStatusMessage("fileSaveStatus", "Vprašalnik je shranjen kot nova HTML datoteka »" + result.fileName + "« v Prenose ob " + formatStatusDateTime() + ". Za nadaljevanje odprite zadnjo shranjeno datoteko.", "warning");
-                }
+                setStatusMessage("answersStatus", "Odgovori so shranjeni v datoteko »" + fileName + "«. Za nadaljevanje kasneje uporabite »Uvozi odgovore« in izberite zadnjo shranjeno datoteko.", "success");
             } catch (err) {
-                if (err?.name === "AbortError") {
-                    setStatusMessage("fileSaveStatus", "Shranjevanje je bilo preklicano. Odgovori ostanejo v odprtem vprašalniku, vendar datoteka ni bila posodobljena.", "warning");
-                    return;
-                }
-                console.error("Shranjevanje vprašalnika ni uspelo:", err);
-                setStatusMessage("fileSaveStatus", "Shranjevanje ni uspelo. Poskusite še enkrat ali uporabite drug brskalnik.", "error");
+                console.error("Shranjevanje odgovorov ni uspelo:", err);
+                setStatusMessage("answersStatus", "Shranjevanje odgovorov ni uspelo. Poskusite še enkrat.", "error");
             } finally {
                 if (saveButton) {
                     saveButton.disabled = false;
-                    saveButton.textContent = "Shrani vprašalnik";
+                    saveButton.textContent = "Shrani odgovore";
                 }
             }
+        }
+
+        function validateAnswersDraft(draft) {
+            if (!draft || typeof draft !== "object") {
+                return { ok: false, message: "Izbrana datoteka ni veljavna datoteka z odgovori." };
+            }
+            if (!Array.isArray(draft.answers)) {
+                return { ok: false, message: "Izbrana datoteka ne vsebuje odgovorov za vprašalnik." };
+            }
+            if (draft.surveyPeriod && draft.surveyPeriod !== (RUNTIME_CONFIG.surveyPeriod || "")) {
+                return { ok: false, message: "Datoteka z odgovori je bila shranjena za drugo obdobje. Preverite, ali ste izbrali pravo datoteko." };
+            }
+            if (draft.surveyId && draft.surveyId !== getSurveyId()) {
+                return { ok: true, warning: "Odgovori so uvoženi, vendar je bila datoteka morda ustvarjena za nekoliko drugo verzijo vprašalnika. Preverite uvožene odgovore." };
+            }
+            return { ok: true, warning: "" };
+        }
+
+        function importAnswersFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                try {
+                    const draft = JSON.parse(event.target.result);
+                    const validation = validateAnswersDraft(draft);
+                    if (!validation.ok) {
+                        setStatusMessage("answersStatus", validation.message || "Izbrana datoteka ni veljavna datoteka z odgovori za ta vprašalnik.", "error");
+                        return;
+                    }
+
+                    applyDraft(draft);
+                    const fileName = file.name || "datoteka z odgovori";
+                    if (validation.warning) {
+                        setStatusMessage("answersStatus", validation.warning + " Datoteka: »" + fileName + "«.", "warning");
+                    } else {
+                        setStatusMessage("answersStatus", "Odgovori so bili uvoženi iz datoteke »" + fileName + "«. Nadaljujte z izpolnjevanjem.", "success");
+                    }
+                } catch (err) {
+                    console.error("Uvoz odgovorov ni uspel:", err);
+                    setStatusMessage("answersStatus", "Uvoz odgovorov ni uspel. Izberite shranjeno datoteko z odgovori.", "error");
+                }
+            };
+            reader.onerror = function () {
+                setStatusMessage("answersStatus", "Datoteke z odgovori ni bilo mogoče prebrati.", "error");
+            };
+            reader.readAsText(file);
         }
 
         function clearDraftBackup() {
@@ -4021,6 +4059,7 @@ PO;TO;SR;ČE;PE;SO;NE
             renderSurvey();
             clearDraftBackup();
             updateDocumentTitleForPdf();
+            setStatusMessage("answersStatus", "Odgovori so počiščeni. Za nadaljevanje iz shranjene datoteke uporabite »Uvozi odgovore«.", "warning");
 
             alert("Vsi odgovori in lokalno shranjen osnutek so bili pobrisani.");
         }
@@ -4037,10 +4076,18 @@ PO;TO;SR;ČE;PE;SO;NE
 
             const cards = Array.from(document.querySelectorAll("#surveyContainer .section-question-card[data-question-index]"));
 
+            const visibleQuestions = getVisibleQuestionConfigs();
+
             (draft.answers || []).forEach((answer) => {
-                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(answer.questionIndex));
+                let questionIndex = Number(answer.questionIndex);
+                if (answer.questionId) {
+                    const idIndex = visibleQuestions.findIndex(question => question?.id === answer.questionId);
+                    if (idIndex >= 0) questionIndex = idIndex;
+                }
+
+                const card = cards.find(c => Number(c.dataset.questionIndex) === Number(questionIndex));
                 if (!card) return;
-                const q = getVisibleQuestionConfigs()[Number(answer.questionIndex)];
+                const q = visibleQuestions[questionIndex];
                 if (!q || !card) return;
 
                 if (q.type === "text_long") {
@@ -4057,17 +4104,17 @@ PO;TO;SR;ČE;PE;SO;NE
                     const cols = Math.max(1, Number.parseInt(String(q.matrix?.cols || 0), 10) || 1);
                     const normalizedRows = normalizeMatrixRows(answer.matrixRows, rows, cols, getMatrixInitialRows(q, rows, cols));
                     const fileName = answer.matrixCsv
-                        ? ("Matrika-" + (Number(answer.questionIndex) + 1) + ".csv")
+                        ? ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
                         : "";
-                    MATRIX_EDITOR_STATE.set(Number(answer.questionIndex), {
+                    MATRIX_EDITOR_STATE.set(Number(questionIndex), {
                         rows: normalizedRows,
                         csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
                         fileName,
                         saved: true
                     });
-                    MATRIX_CSV_ATTACHMENTS.set(Number(answer.questionIndex), {
+                    MATRIX_CSV_ATTACHMENTS.set(Number(questionIndex), {
                         csv: answer.matrixCsv || matrixValuesToCsv(normalizedRows),
-                        fileName: fileName || ("Matrika-" + (Number(answer.questionIndex) + 1) + ".csv")
+                        fileName: fileName || ("Matrika-" + (Number(questionIndex) + 1) + ".csv")
                     });
                 }
 
@@ -4989,7 +5036,15 @@ PO;TO;SR;ČE;PE;SO;NE
         }
         const printAndMailBtn = document.getElementById("printAndMailBtn");
         if (printAndMailBtn) printAndMailBtn.addEventListener("click", printAndMail);
-        document.getElementById("saveDraftBtn").addEventListener("click", saveDraftToFile);
+        document.getElementById("saveAnswersBtn").addEventListener("click", saveAnswersToFile);
+        document.getElementById("importAnswersBtn").addEventListener("click", () => {
+            document.getElementById("importAnswersInput").click();
+        });
+        document.getElementById("importAnswersInput").addEventListener("change", (event) => {
+            const file = event.target.files?.[0];
+            if (file) importAnswersFromFile(file);
+            event.target.value = "";
+        });
         document.getElementById("resetAnswersBtn").addEventListener("click", resetSurveyAnswers);
 
         document.addEventListener("click", async (event) => {
@@ -5030,6 +5085,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const backup = loadDraftBackup();
             if (backup) applyDraft(backup);
         }
+
     ${"</scr" + "ipt>"}
 </body>
 </html>`;
