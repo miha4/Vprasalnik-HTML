@@ -3260,17 +3260,71 @@ PO;TO;SR;ČE;PE;SO;NE
             min-width: 0;
         }
 
-        .main-actions .primary-save {
-            background: #2563eb;
-            border-color: #2563eb;
-            color: #fff;
+        .main-actions .secondary-action {
+            background: #fff;
+            color: #1f2937;
+            border-color: #cbd5e1;
             font-weight: 700;
+        }
+
+        .main-actions .secondary-action:hover {
+            background: #f8fafc;
+        }
+
+        .final-actions {
+            margin-top: 14px;
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr);
+            gap: 10px;
+        }
+
+        .final-actions .final-pdf {
+            width: 100%;
+            min-width: 0;
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 800;
             font-size: 16px;
             padding: 14px 18px;
         }
 
-        .main-actions .primary-save:hover {
-            background: #1d4ed8;
+        .final-actions .final-pdf:hover {
+            background: #166534;
+        }
+
+        .pdf-save {
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .pdf-save:hover {
+            background: #166534;
+            border-color: #166534;
+        }
+
+        .main-actions .pdf-save {
+            font-size: 16px;
+            padding: 14px 18px;
+        }
+
+        .pdf-save {
+            background: #15803d;
+            border-color: #15803d;
+            color: #fff;
+            font-weight: 700;
+        }
+
+        .pdf-save:hover {
+            background: #166534;
+            border-color: #166534;
+        }
+
+        .main-actions .pdf-save {
+            font-size: 16px;
+            padding: 14px 18px;
         }
 
         .pdf-save {
@@ -3298,6 +3352,17 @@ PO;TO;SR;ČE;PE;SO;NE
         .save-help {
             margin-top: 10px;
             line-height: 1.45;
+        }
+
+        .action-heading {
+            font-weight: 800;
+            margin: 0 0 8px;
+        }
+
+        .final-output-box {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid #e2e8f0;
         }
 
         .save-status {
@@ -3484,6 +3549,7 @@ PO;TO;SR;ČE;PE;SO;NE
         <div id="matrixPrintAppendix" class="card matrix-print-appendix hidden"></div>
 
         <div class="card no-print">
+            <div class="action-heading">Delo z odgovori</div>
             <div class="btns main-actions">
                 <button type="button" id="saveDraftBtn" class="primary-save">Shrani bazo odgovorov</button>
                 <button type="button" id="printPdfBtn" class="pdf-save">Shrani cel vprašalnik v PDF</button>
@@ -4102,6 +4168,36 @@ PO;TO;SR;ČE;PE;SO;NE
                 console.error("Uvoz baze odgovorov ni uspel:", err);
                 setStatusMessage("fileSaveStatus", err?.message || "Uvoz baze odgovorov ni uspel.", "error");
             }
+            return { ok: true, warning: "" };
+        }
+
+        function importAnswersFromFile(file) {
+            const reader = new FileReader();
+            reader.onload = function (event) {
+                try {
+                    const draft = JSON.parse(event.target.result);
+                    const validation = validateAnswersDraft(draft);
+                    if (!validation.ok) {
+                        setStatusMessage("answersStatus", validation.message || "Izbrana datoteka ni veljavna datoteka z odgovori za ta vprašalnik.", "error");
+                        return;
+                    }
+
+                    applyDraft(draft);
+                    const fileName = file.name || "datoteka z odgovori";
+                    if (validation.warning) {
+                        setStatusMessage("answersStatus", validation.warning + " Datoteka: »" + fileName + "«.", "warning");
+                    } else {
+                        setStatusMessage("answersStatus", "Odgovori so bili uvoženi iz datoteke »" + fileName + "«. Nadaljujte z izpolnjevanjem.", "success");
+                    }
+                } catch (err) {
+                    console.error("Uvoz odgovorov ni uspel:", err);
+                    setStatusMessage("answersStatus", "Uvoz odgovorov ni uspel. Izberite shranjeno datoteko z odgovori.", "error");
+                }
+            };
+            reader.onerror = function () {
+                setStatusMessage("answersStatus", "Datoteke z odgovori ni bilo mogoče prebrati.", "error");
+            };
+            reader.readAsText(file);
         }
 
         function clearDraftBackup() {
@@ -4122,6 +4218,7 @@ PO;TO;SR;ČE;PE;SO;NE
             renderSurvey();
             clearDraftBackup();
             updateDocumentTitleForPdf();
+            setStatusMessage("answersStatus", "Odgovori so počiščeni. Za nadaljevanje iz shranjene datoteke uporabite »Uvozi odgovore«.", "warning");
 
             HAS_UNEXPORTED_CHANGES = false;
             setStatusMessage("fileSaveStatus", "Odgovori so bili pobrisani. Bazo odgovorov izvozite, ko boste dodali nove odgovore.", "warning");
@@ -5214,6 +5311,7 @@ PO;TO;SR;ČE;PE;SO;NE
             const backup = loadDraftBackup();
             if (backup) applyDraft(backup);
         }
+
     ${"</scr" + "ipt>"}
 </body>
 </html>`;
